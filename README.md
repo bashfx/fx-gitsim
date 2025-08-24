@@ -1,31 +1,37 @@
-# Git & Home Environment Simulator
+# Git & Home Environment Simulator (BashFX Edition)
 
-A comprehensive testing simulator that creates isolated Git repositories and home directory environments for testing scripts and applications without affecting your real filesystem or Git repositories.
+A BashFX-compliant testing simulator that creates isolated Git repositories and home directory environments for testing scripts and applications. Built following the BashFX architecture principles: self-contained, rewindable, XDG+ compliant, and respects your real environment.
 
 ## Features
 
 - **Git Command Simulation**: Simulate common Git operations (commit, branch, tag, etc.)
 - **Home Environment Simulation**: Create fake home directories with standard Unix/Linux directory structures
-- **Environment Variable Management**: Use `SIM_` prefixed variables that inherit from your shell but can be overridden
+- **SIM_ Variable Management**: Use `SIM_` prefixed variables that inherit from your shell but can be overridden (never touches `$HOME`)
+- **XDG+ Compliance**: Follows BashFX directory standards with clean installation/uninstallation
+- **BashFX Architecture**: Proper function ordinality, stderr conventions, and rewindable operations
 - **Flexible Initialization**: Create Git repos in current directory or within simulated home projects
 - **Testing Utilities**: Generate sample commits, branches, tags, and files for comprehensive testing
 
-## Quick Start
+## Installation
 
+### Quick Use (No Installation)
 ```bash
-# Make executable
-chmod +x git_sim.sh
+# Download and make executable
+curl -sL "https://raw.githubusercontent.com/bashfx/fx-gitsim/main/gitsim.sh" > gitsim.sh
+chmod +x gitsim.sh
+./gitsim.sh init
+```
 
-# Initialize a basic Git simulation
-./git_sim.sh init
+### BashFX Installation (Recommended)
+```bash
+# Install to XDG+ directories
+./gitsim.sh install
 
-# Or initialize with simulated home environment
-./git_sim.sh init-in-home myproject
+# Add fx bin to PATH
+export PATH="$HOME/.local/bin/fx:$PATH"
 
-# Create test data
-./git_sim.sh noise 5
-./git_sim.sh history 10 3
-./git_sim.sh branches 4
+# Now use as 'gitsim' globally
+gitsim init
 ```
 
 ## Commands Reference
@@ -35,14 +41,36 @@ chmod +x git_sim.sh
 #### `init`
 Create a Git simulation in the current directory.
 ```bash
-./git_sim.sh init
+./gitsim.sh init
 ```
 
 #### `init-in-home [project-name]`
 Create a Git simulation inside a fake project directory within simulated home.
 ```bash
-./git_sim.sh init-in-home myproject
-./git_sim.sh init-in-home  # defaults to "testproject"
+./gitsim.sh init-in-home myproject
+./gitsim.sh init-in-home  # defaults to "testproject"
+```
+
+### System Management
+
+#### `install`
+Install to BashFX XDG+ directories for system-wide use.
+```bash
+./gitsim.sh install
+export PATH="$HOME/.local/bin/fx:$PATH"
+gitsim --help  # Now available globally
+```
+
+#### `uninstall --force` 
+Remove installation (requires --force for safety).
+```bash
+gitsim uninstall --force
+```
+
+#### `version`
+Show version information.
+```bash
+gitsim version
 ```
 
 ### Home Environment Simulation
@@ -83,7 +111,8 @@ List contents of simulated home directory.
 #### `home-vars`
 Show current SIM_ environment variables and how to override them.
 ```bash
-./git_sim.sh home-vars
+./gitsim.sh home-vars
+# Shows current values and override examples
 ```
 
 ### Git Commands
@@ -129,37 +158,33 @@ All standard Git commands are supported with realistic behavior:
 #### `noise [count]`
 Create random files and stage them.
 ```bash
-./git_sim.sh noise      # 1 file
-./git_sim.sh noise 10   # 10 files
+./gitsim.sh noise      # 1 file
+./gitsim.sh noise 10   # 10 files
 ```
 
-#### `branches [count]`
-Create multiple realistic branches with commits.
-```bash
-./git_sim.sh branches 5
-```
+## Environment Variables (SIM_ Variables)
 
-#### `history [commits] [tags]`
-Generate a commit history with version tags.
-```bash
-./git_sim.sh history 10 3  # 10 commits, 3 tags
-./git_sim.sh history 20    # 20 commits, 2 tags (default)
-```
-
-## Environment Variables
-
-The simulator uses `SIM_` prefixed variables that inherit from your environment but can be overridden:
+The simulator uses `SIM_` prefixed variables that inherit from your environment but can be overridden. **Importantly, it never overrides your real `$HOME`**.
 
 ```bash
-# Default inheritance
-SIM_HOME=${XDG_HOME:-$HOME}
-SIM_USER=${USER}
-SIM_SHELL=${SHELL}
-SIM_EDITOR=${EDITOR}
-SIM_LANG=${LANG}
+# Default inheritance (safe!)
+SIM_HOME=${XDG_HOME:-$HOME}  # Uses XDG_HOME if set, fallback to HOME
+SIM_USER=${USER}             # Inherits your username
+SIM_SHELL=${SHELL}           # Inherits your shell
+SIM_EDITOR=${EDITOR}         # Inherits your editor
+SIM_LANG=${LANG}             # Inherits your locale
 
 # Override for testing
-SIM_USER=testuser SIM_EDITOR=vim ./git_sim.sh home-init
+SIM_USER=testuser SIM_EDITOR=vim ./gitsim.sh home-init
+```
+
+### XDG+ Directory Structure
+
+When installed, follows BashFX XDG+ compliance:
+
+```bash
+~/.local/lib/fx/gitsim/     # Library files
+~/.local/bin/fx/gitsim      # Executable symlink (flattened)
 ```
 
 ## Directory Structure
@@ -184,9 +209,9 @@ your-project/
 └── .gitsim/
     ├── .data/           # Git simulation state
     └── .home/           # Simulated home directory
-        ├── .bashrc      # Shell configuration
+        ├── .bashrc      # Shell configuration (with SIM_ vars)
         ├── .profile     # Login profile
-        ├── .gitconfig   # Git user config
+        ├── .gitconfig   # Git user config (uses SIM_USER)
         ├── .config/     # XDG config directory
         ├── .local/      # XDG local directory
         │   ├── bin/
@@ -210,17 +235,17 @@ Test tools like version bumpers, changelog generators, or release scripts:
 
 ```bash
 # Set up a realistic project
-./git_sim.sh init
-./git_sim.sh history 15 4
-./git_sim.sh branches 6
+./gitsim.sh init
+./gitsim.sh noise 5
+./gitsim.sh commit -m "Initial commit"
+./gitsim.sh commit -m "feat: add new feature"
 
 # Test your semver tool
 your-semver-tool --check
 your-semver-tool --bump patch
 
 # Verify the simulation
-./git_sim.sh tag
-./git_sim.sh log --oneline
+./gitsim.sh status
 ```
 
 ### 2. Testing Home Directory Scripts
@@ -229,17 +254,17 @@ Test dotfile managers, configuration scripts, or installation tools:
 
 ```bash
 # Create simulated environment
-./git_sim.sh home-init
+./gitsim.sh home-init
 
-# Get paths for your script
-CONFIG_DIR=$(./git_sim.sh home-path)/.config
-DATA_DIR=$(./git_sim.sh home-path)/.local/share
+# Get paths for your script (never touches real $HOME!)
+CONFIG_DIR=$(./gitsim.sh home-path)/.config
+DATA_DIR=$(./gitsim.sh home-path)/.local/share
 
 # Test your dotfile manager
 your-dotfile-manager install --config-dir="$CONFIG_DIR"
 
 # Verify installation
-./git_sim.sh home-ls .config -la
+./gitsim.sh home-ls .config -la
 ```
 
 ### 3. CI/CD Pipeline Testing
@@ -300,28 +325,50 @@ Test tools that work with both Git and filesystem:
 # Your test script
 
 # Set up test environment
-./git_sim.sh init-in-home testapp
-PROJECT_DIR=$(./git_sim.sh home-path)/projects/testapp
-CONFIG_DIR=$(./git_sim.sh home-path)/.config
+./gitsim.sh init-in-home testapp
+PROJECT_DIR=$(./gitsim.sh home-path)/projects/testapp
+CONFIG_DIR=$(./gitsim.sh home-path)/.config
 
 cd "$PROJECT_DIR"
-../../../git_sim.sh history 10 2
+../../../gitsim.sh commit -m "Initial setup"
 
 # Test your tool
 your-tool --project="$PROJECT_DIR" --config="$CONFIG_DIR"
 
 # Verify results
-../../../git_sim.sh status
+../../../gitsim.sh status
 ls -la "$CONFIG_DIR"
 ```
+
+## Testing the Simulator
+
+Run the comprehensive test suite:
+
+```bash
+# Run all tests
+./test_runner.sh
+
+# Test specific scenarios
+./gitsim.sh -D dev-test
+```
+
+The test runner covers:
+- Basic workflow (init → add → commit → status)
+- Home environment simulation
+- Init-in-home projects  
+- SIM_ variable inheritance
+- Install/uninstall lifecycle
+- Error conditions and validation
 
 ## Tips and Best Practices
 
 1. **Isolation**: Each `.gitsim` directory is completely isolated - you can have multiple simulations
-2. **Cleanup**: Remove `.gitsim` directories when done testing
-3. **Scripting**: Use `$(./git_sim.sh home-path)` to get paths dynamically
+2. **Cleanup**: Remove `.gitsim` directories when done testing (`rm -rf .gitsim`)
+3. **Scripting**: Use `$(./gitsim.sh home-path)` to get paths dynamically
 4. **Environment**: Override `SIM_` variables to test different user scenarios
-5. **Realistic Data**: Use `history` and `branches` commands to create realistic test scenarios
+5. **Safety**: The simulator never touches your real `$HOME` or Git repositories
+6. **Installation**: Use `install` for system-wide access, keeps everything in XDG+ directories
+7. **Rewindability**: `uninstall --force` removes all traces cleanly
 
 ## Integration with Testing Frameworks
 
@@ -345,26 +392,42 @@ teardown() {
 ### Make Targets
 ```make
 test-setup:
-	./git_sim.sh init-in-home testproject
-	./git_sim.sh history 10 3
+	./gitsim.sh init-in-home testproject
 
 test: test-setup
-	cd $$(./git_sim.sh home-path)/projects/testproject && \
+	cd $(./gitsim.sh home-path)/projects/testproject && \
 	../../../your-tool test
 
 test-clean:
 	rm -rf .gitsim
+
+install-dev:
+	./gitsim.sh install
+
+uninstall-dev:
+	./gitsim.sh uninstall --force
 ```
+
+## BashFX Architecture
+
+This simulator follows BashFX principles:
+
+- **Self-Contained**: Everything in XDG+ directories (`~/.local/`)
+- **Rewindable**: Clean install/uninstall lifecycle  
+- **Invisible**: No pollution of `$HOME`, respects existing environment
+- **Function Ordinality**: Proper High-Order → Mid-Ordinal → Low-Ordinal structure
+- **Standard Interface**: Consistent option flags, stderr conventions, return codes
 
 ## Contributing
 
-The simulator is designed to be easily extensible. To add new Git commands or home directory features:
+The simulator follows BashFX architecture patterns. To add features:
 
-1. Add the command to the `usage()` function
-2. Implement `cmd_your_command()` function
-3. Add the case statement in the main dispatcher
-4. Test with realistic scenarios
+1. **Follow Function Ordinality**: High-Order `do_*` → Mid-Ordinal `_helper` → Low-Ordinal `__literal`
+2. **Use Standard Variables**: `ret`, `res`, `path`, `home_dir`, etc.
+3. **Respect SIM_ Variables**: Never override real environment, use inheritance
+4. **Add Tests**: Update `test_runner.sh` with new test scenarios
+5. **XDG+ Compliance**: Keep everything in `~/.local/` hierarchy
 
 ## License
 
-This tool is provided as-is for testing and development purposes.
+This tool is provided as-is for testing and development purposes. Built with love for the BashFX architecture! 🏗️
