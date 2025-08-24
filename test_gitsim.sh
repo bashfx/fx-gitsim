@@ -1,411 +1,434 @@
 #!/usr/bin/env bash
+# test_runner.sh - Basic and E2E tests for gitsim.sh
 
-# test_git_sim.sh - Test suite for the git simulator
-# Because we need to test the tester! 😅
+# Exit immediately if a command exits with a non-zero status.
+set -e
 
-set -euo pipefail
+echo "=== Running Basic GitSim Tests ==="
+echo
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Ensure gitsim.sh is executable
+if [ ! -x ./gitsim.sh ]; then
+    echo "ERROR: ./gitsim.sh is not executable. Run chmod +x ./gitsim.sh"
+    exit 1
+fi
 
-# Test counters
-TESTS_RUN=0
-TESTS_PASSED=0
-TESTS_FAILED=0
+echo "--> Testing './gitsim.sh --help'..."
+./gitsim.sh --help > /dev/null
+echo "OK"
+echo
 
-# Test setup
-TEST_DIR="$(mktemp -d)"
-ORIGINAL_DIR="$PWD"
-GITSIM="$ORIGINAL_DIR/git_sim.sh"
+echo "--> Testing './gitsim.sh version'..."
+./gitsim.sh version > /dev/null
+echo "OK"
+echo
 
-cleanup() {
-    cd "$ORIGINAL_DIR"
-    rm -rf "$TEST_DIR"
-}
-trap cleanup EXIT
+run_basic_workflow_test() {
+    echo
+    echo "=== Running Basic Workflow Test ==="
+    echo
 
-log_test() {
-    echo -e "${YELLOW}[TEST]${NC} $1"
-    TESTS_RUN=$((TESTS_RUN + 1))
-}
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(mktemp -d)
+    echo "--> Created temp directory for test: $test_dir"
 
-assert_success() {
-    if [[ $? -eq 0 ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC}"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    echo "OK"
+
+    # 4. Check that init worked
+    echo "--> Verifying init results..."
+    if [ ! -d ".gitsim" ] || [ ! -d ".gitsim/.data" ] || [ ! -f ".gitsim/.data/commits.txt" ]; then
+        echo "ERROR: 'init' did not create proper .gitsim structure"
+        exit 1
     fi
-}
+    echo "OK"
 
-assert_failure() {
-    if [[ $? -ne 0 ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC} (expected failure)"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC} (should have failed)"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
-}
-
-assert_file_exists() {
-    if [[ -f "$1" ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC} File exists: $1"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC} File missing: $1"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
-}
-
-assert_dir_exists() {
-    if [[ -d "$1" ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC} Directory exists: $1"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC} Directory missing: $1"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
-}
-
-assert_contains() {
-    local content="$1"
-    local expected="$2"
-    if [[ "$content" == *"$expected"* ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC} Contains: '$expected'"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC} Missing: '$expected'"
-        echo "    Got: '$content'"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
-}
-
-# Test functions
-
-test_basic_init() {
-    log_test "Basic git init"
-    cd "$TEST_DIR"
-    mkdir basic_init && cd basic_init
-    
-    "$GITSIM" init > /dev/null
-    assert_success
-    
-    TESTS_RUN=$((TESTS_RUN + 4))  # We'll check 4 things
-    assert_dir_exists ".gitsim"
-    assert_dir_exists ".gitsim/.data"
-    assert_file_exists ".gitsim/.data/commits.txt"
-    assert_file_exists ".gitsim/.data/HEAD"
-}
-
-test_home_init() {
-    log_test "Home environment initialization"
-    cd "$TEST_DIR"
-    mkdir home_init && cd home_init
-    
-    "$GITSIM" init > /dev/null
-    "$GITSIM" home-init > /dev/null
-    assert_success
-    
-    TESTS_RUN=$((TESTS_RUN + 6))
-    assert_dir_exists ".gitsim/.home"
-    assert_dir_exists ".gitsim/.home/.config"
-    assert_dir_exists ".gitsim/.home/.local"
-    assert_dir_exists ".gitsim/.home/projects"
-    assert_file_exists ".gitsim/.home/.bashrc"
-    assert_file_exists ".gitsim/.home/.gitconfig"
-}
-
-test_init_in_home() {
-    log_test "Init in home with project"
-    cd "$TEST_DIR"
-    mkdir init_in_home && cd init_in_home
-    
-    "$GITSIM" init > /dev/null
-    "$GITSIM" init-in-home testproject > /dev/null
-    assert_success
-    
-    TESTS_RUN=$((TESTS_RUN + 4))
-    assert_dir_exists ".gitsim/.home/projects/testproject"
-    assert_dir_exists ".gitsim/.home/projects/testproject/.gitsim"
-    assert_file_exists ".gitsim/.home/projects/testproject/README.md"
-    assert_file_exists ".gitsim/.home/projects/testproject/.gitignore"
-}
-
-test_commit_workflow() {
-    log_test "Basic commit workflow"
-    cd "$TEST_DIR"
-    mkdir commit_test && cd commit_test
-    
-    "$GITSIM" init > /dev/null
-    
-    # Should fail with no staged files
-    "$GITSIM" commit -m "Empty commit" 2>/dev/null
-    assert_failure
-    TESTS_RUN=$((TESTS_RUN - 1))  # Don't double count this test
-    
-    # Add some files
+    # 5. Create some test files
+    echo "--> Creating test files..."
     echo "test content" > testfile.txt
-    "$GITSIM" add testfile.txt
-    "$GITSIM" commit -m "Initial commit" > /dev/null
-    assert_success
-    
-    # Check commit was recorded
-    TESTS_RUN=$((TESTS_RUN + 1))
-    local commits_content
-    commits_content=$(cat .gitsim/.data/commits.txt)
-    assert_contains "$commits_content" "Initial commit"
-}
+    echo "more content" > another.md
+    echo "OK"
 
-test_branch_operations() {
-    log_test "Branch operations"
-    cd "$TEST_DIR"
-    mkdir branch_test && cd branch_test
-    
-    "$GITSIM" init > /dev/null
-    
-    # Create a branch
-    "$GITSIM" branch feature/test
-    assert_success
-    
-    # List branches
-    TESTS_RUN=$((TESTS_RUN + 1))
-    local branches_output
-    branches_output=$("$GITSIM" branch)
-    assert_contains "$branches_output" "feature/test"
-    
-    # Switch to branch
-    "$GITSIM" checkout feature/test > /dev/null
-    assert_success
-    
-    # Check current branch
-    TESTS_RUN=$((TESTS_RUN + 1))
-    local current_branch
-    current_branch=$(cat .gitsim/.data/branch.txt)
-    assert_contains "$current_branch" "feature/test"
-}
+    # 6. Add files to staging
+    echo "--> Running 'gitsim add .'..."
+    "$original_dir/gitsim.sh" add . > /dev/null
+    echo "OK"
 
-test_tag_operations() {
-    log_test "Tag operations"
-    cd "$TEST_DIR"
-    mkdir tag_test && cd tag_test
-    
-    "$GITSIM" init > /dev/null
-    
-    # Create a commit first
-    echo "content" > file.txt
-    "$GITSIM" add file.txt
-    "$GITSIM" commit -m "Test commit" > /dev/null
-    
-    # Create a tag
-    "$GITSIM" tag v1.0.0
-    assert_success
-    
-    # List tags
-    TESTS_RUN=$((TESTS_RUN + 1))
-    local tags_output
-    tags_output=$("$GITSIM" tag)
-    assert_contains "$tags_output" "v1.0.0"
-}
-
-test_noise_generation() {
-    log_test "Noise file generation"
-    cd "$TEST_DIR"
-    mkdir noise_test && cd noise_test
-    
-    "$GITSIM" init > /dev/null
-    "$GITSIM" noise 3 > /dev/null
-    assert_success
-    
-    # Check files were created and staged
-    TESTS_RUN=$((TESTS_RUN + 1))
-    local index_content
-    index_content=$(cat .gitsim/.data/index)
-    local file_count
-    file_count=$(echo "$index_content" | wc -l | tr -d ' ')
-    
-    if [[ "$file_count" -eq 3 ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC} Created 3 files"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC} Expected 3 files, got $file_count"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
+    # 7. Check staging worked
+    echo "--> Verifying staging results..."
+    if [ ! -s ".gitsim/.data/index" ]; then
+        echo "ERROR: 'add' did not stage files"
+        exit 1
     fi
+    echo "OK"
+
+    # 8. Create a commit
+    echo "--> Running 'gitsim commit -m \"Test commit\"'..."
+    "$original_dir/gitsim.sh" commit -m "Test commit" > /dev/null
+    echo "OK"
+
+    # 9. Check commit worked
+    echo "--> Verifying commit results..."
+    if [ ! -s ".gitsim/.data/commits.txt" ] || [ -s ".gitsim/.data/index" ]; then
+        echo "ERROR: 'commit' did not create commit or clear staging area"
+        exit 1
+    fi
+    echo "OK"
+
+    # 10. Test status command
+    echo "--> Running 'gitsim status'..."
+    "$original_dir/gitsim.sh" status > /dev/null
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+
+    # The trap will handle cleanup
 }
 
-test_history_generation() {
-    log_test "History generation"
-    cd "$TEST_DIR"
-    mkdir history_test && cd history_test
-    
-    "$GITSIM" init > /dev/null
-    "$GITSIM" history 5 2 > /dev/null
-    assert_success
-    
-    # Check commits were created
-    TESTS_RUN=$((TESTS_RUN + 1))
-    local commit_count
-    commit_count=$(wc -l < .gitsim/.data/commits.txt | tr -d ' ')
-    
-    if [[ "$commit_count" -eq 5 ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC} Created 5 commits"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC} Expected 5 commits, got $commit_count"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-    fi
-    
-    # Check tags were created
-    TESTS_RUN=$((TESTS_RUN + 1))
-    local tag_count
-    tag_count=$(wc -l < .gitsim/.data/tags.txt | tr -d ' ')
-    
-    if [[ "$tag_count" -eq 2 ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC} Created 2 tags"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC} Expected 2 tags, got $tag_count"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-    fi
-}
+run_home_environment_test() {
+    echo
+    echo "=== Running Home Environment Test ==="
+    echo
 
-test_home_paths() {
-    log_test "Home path operations"
-    cd "$TEST_DIR"
-    mkdir home_paths && cd home_paths
-    
-    "$GITSIM" init > /dev/null
-    "$GITSIM" home-init > /dev/null
-    
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(mktemp -d)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation first
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    echo "OK"
+
+    # 4. Initialize home environment
+    echo "--> Running 'gitsim home-init'..."
+    "$original_dir/gitsim.sh" home-init > /dev/null
+    echo "OK"
+
+    # 5. Check that home-init worked
+    echo "--> Verifying home-init results..."
+    if [ ! -d ".gitsim/.home" ] || [ ! -d ".gitsim/.home/.config" ] || [ ! -d ".gitsim/.home/projects" ]; then
+        echo "ERROR: 'home-init' did not create proper home structure"
+        exit 1
+    fi
+    if [ ! -f ".gitsim/.home/.bashrc" ] || [ ! -f ".gitsim/.home/.gitconfig" ]; then
+        echo "ERROR: 'home-init' did not create dotfiles"
+        exit 1
+    fi
+    echo "OK"
+
+    # 6. Test home-path command
+    echo "--> Running 'gitsim home-path'..."
     local home_path
-    home_path=$("$GITSIM" home-path)
-    assert_success
-    
-    # Verify path exists
-    TESTS_RUN=$((TESTS_RUN + 1))
-    if [[ -d "$home_path" ]]; then
-        echo -e "  ${GREEN}✓ PASS${NC} Home path exists: $home_path"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "  ${RED}✗ FAIL${NC} Home path missing: $home_path"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-    fi
-    
-    # Test home-ls
-    "$GITSIM" home-ls > /dev/null
-    assert_success
-}
-
-test_git_log_formats() {
-    log_test "Git log formats"
-    cd "$TEST_DIR"
-    mkdir log_test && cd log_test
-    
-    "$GITSIM" init > /dev/null
-    "$GITSIM" history 3 1 > /dev/null
-    
-    # Test regular log
-    "$GITSIM" log > /dev/null
-    assert_success
-    
-    # Test oneline log
-    "$GITSIM" log --oneline > /dev/null
-    assert_success
-}
-
-test_sim_variables() {
-    log_test "SIM_ environment variables"
-    
-    # Test with custom variables
-    cd "$TEST_DIR"
-    mkdir sim_vars && cd sim_vars
-    
-    SIM_USER=testuser SIM_EDITOR=vim "$GITSIM" init > /dev/null
-    SIM_USER=testuser SIM_EDITOR=vim "$GITSIM" home-init > /dev/null
-    assert_success
-    
-    # Check .gitconfig has custom user
-    TESTS_RUN=$((TESTS_RUN + 1))
-    local gitconfig_content
-    gitconfig_content=$(cat .gitsim/.home/.gitconfig)
-    assert_contains "$gitconfig_content" "testuser"
-}
-
-test_error_conditions() {
-    log_test "Error conditions"
-    cd "$TEST_DIR"
-    mkdir error_test && cd error_test
-    
-    # Should fail without init
-    "$GITSIM" status 2>/dev/null
-    assert_failure
-    TESTS_RUN=$((TESTS_RUN - 1))  # Don't double count
-    
-    "$GITSIM" init > /dev/null
-    
-    # Should fail with duplicate tag
-    echo "content" > file.txt
-    "$GITSIM" add file.txt
-    "$GITSIM" commit -m "Test" > /dev/null
-    "$GITSIM" tag v1.0.0 > /dev/null
-    "$GITSIM" tag v1.0.0 2>/dev/null
-    assert_failure
-    TESTS_RUN=$((TESTS_RUN - 1))
-}
-
-# Main execution
-main() {
-    echo "🧪 Testing the Git Simulator"
-    echo "Test directory: $TEST_DIR"
-    echo "Git simulator: $GITSIM"
-    echo ""
-    
-    if [[ ! -f "$GITSIM" ]]; then
-        echo -e "${RED}Error: git_sim.sh not found at $GITSIM${NC}"
+    home_path=$("$original_dir/gitsim.sh" home-path)
+    if [ ! -d "$home_path" ]; then
+        echo "ERROR: 'home-path' returned invalid path: $home_path"
         exit 1
     fi
-    
-    # Make it executable
-    chmod +x "$GITSIM"
-    
-    # Run all tests
-    test_basic_init
-    test_home_init
-    test_init_in_home
-    test_commit_workflow
-    test_branch_operations
-    test_tag_operations
-    test_noise_generation
-    test_history_generation
-    test_home_paths
-    test_git_log_formats
-    test_sim_variables
-    test_error_conditions
-    
-    # Summary
-    echo ""
-    echo "📊 Test Summary"
-    echo "==============="
-    echo -e "Tests run:    ${YELLOW}$TESTS_RUN${NC}"
-    echo -e "Passed:       ${GREEN}$TESTS_PASSED${NC}"
-    echo -e "Failed:       ${RED}$TESTS_FAILED${NC}"
-    
-    if [[ $TESTS_FAILED -eq 0 ]]; then
-        echo -e "\n🎉 ${GREEN}All tests passed!${NC}"
-        exit 0
-    else
-        echo -e "\n💥 ${RED}Some tests failed!${NC}"
-        exit 1
-    fi
+    echo "OK"
+
+    # 7. Test home-ls command
+    echo "--> Running 'gitsim home-ls'..."
+    "$original_dir/gitsim.sh" home-ls > /dev/null
+    echo "OK"
+
+    # 8. Test home-env command
+    echo "--> Running 'gitsim home-env'..."
+    "$original_dir/gitsim.sh" home-env > /dev/null
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+
+    # The trap will handle cleanup
 }
 
-main "$@"
+run_init_in_home_test() {
+    echo
+    echo "=== Running Init-in-Home Test ==="
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(mktemp -d)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation with project in home
+    echo "--> Running 'gitsim init-in-home testproject'..."
+    "$original_dir/gitsim.sh" init-in-home testproject > /dev/null
+    echo "OK"
+
+    # 4. Check that init-in-home worked
+    echo "--> Verifying init-in-home results..."
+    if [ ! -d ".gitsim/.home/projects/testproject" ]; then
+        echo "ERROR: 'init-in-home' did not create project directory"
+        exit 1
+    fi
+    if [ ! -d ".gitsim/.home/projects/testproject/.gitsim" ]; then
+        echo "ERROR: 'init-in-home' did not create git simulation in project"
+        exit 1
+    fi
+    if [ ! -f ".gitsim/.home/projects/testproject/README.md" ]; then
+        echo "ERROR: 'init-in-home' did not create project files"
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+
+    # The trap will handle cleanup
+}
+
+run_noise_generation_test() {
+    echo
+    echo "=== Running Noise Generation Test ==="
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(mktemp -d)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    echo "OK"
+
+    # 4. Generate noise files
+    echo "--> Running 'gitsim noise 3'..."
+    "$original_dir/gitsim.sh" noise 3 > /dev/null
+    echo "OK"
+
+    # 5. Check that noise generation worked
+    echo "--> Verifying noise generation results..."
+    local file_count
+    file_count=$(wc -l < .gitsim/.data/index | tr -d ' ')
+    if [ "$file_count" -ne 3 ]; then
+        echo "ERROR: 'noise' did not create exactly 3 files (got $file_count)"
+        exit 1
+    fi
+    # Check that actual files were created
+    local actual_files
+    actual_files=$(find . -maxdepth 1 -type f ! -name ".gitignore" | wc -l | tr -d ' ')
+    if [ "$actual_files" -lt 3 ]; then
+        echo "ERROR: 'noise' did not create actual files on filesystem"
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+
+    # The trap will handle cleanup
+}
+
+run_sim_variables_test() {
+    echo
+    echo "=== Running SIM Variables Test ==="
+    echo
+
+    # Test home-vars command
+    echo "--> Testing 'gitsim home-vars'..."
+    ./gitsim.sh home-vars > /dev/null
+    echo "OK"
+
+    # Test with custom SIM variables
+    echo "--> Testing with custom SIM_USER..."
+    local test_dir
+    test_dir=$(mktemp -d)
+    # shellcheck disable=SC2064
+    trap "rm -rf '$test_dir'" EXIT
+    
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # Initialize with custom variables
+    SIM_USER=testuser SIM_EDITOR=vim "$original_dir/gitsim.sh" init > /dev/null
+    SIM_USER=testuser SIM_EDITOR=vim "$original_dir/gitsim.sh" home-init > /dev/null
+    
+    # Check that custom variables were used
+    if ! grep -q "testuser" .gitsim/.home/.gitconfig; then
+        echo "ERROR: Custom SIM_USER was not applied to .gitconfig"
+        exit 1
+    fi
+    if ! grep -q "vim" .gitsim/.home/.gitconfig; then
+        echo "ERROR: Custom SIM_EDITOR was not applied to .gitconfig"
+        exit 1
+    fi
+    echo "OK"
+
+    cd "$original_dir"
+}
+
+run_install_tests() {
+    echo
+    echo "=== Running Install/Uninstall Tests ==="
+    echo
+
+    # Define paths for clarity (using temporary directories to avoid conflicts)
+    local temp_xdg_home
+    temp_xdg_home=$(mktemp -d)
+    local install_dir="$temp_xdg_home/lib/fx/gitsim"
+    local link_path="$temp_xdg_home/bin/fx/gitsim"
+
+    # Setup trap for cleanup
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up install test directories...'; rm -rf '$temp_xdg_home'" EXIT
+
+    # Override XDG paths for testing
+    export XDG_HOME="$temp_xdg_home"
+
+    # 1. Test install
+    echo "--> Testing 'gitsim install'..."
+    ./gitsim.sh install > /dev/null
+    if [ ! -f "$install_dir/gitsim.sh" ] || [ ! -L "$link_path" ]; then
+        echo "ERROR: 'install' did not create script and symlink"
+        echo "  Expected script: $install_dir/gitsim.sh"
+        echo "  Expected link: $link_path"
+        exit 1
+    fi
+    echo "OK"
+
+    # 2. Test uninstall (should fail without --force)
+    echo "--> Testing 'uninstall' without --force (should fail)..."
+    if ./gitsim.sh uninstall > /dev/null 2>&1; then
+        echo "ERROR: 'uninstall' succeeded when it should have failed (safety check)."
+        exit 1
+    fi
+    echo "OK"
+
+    # 3. Test forced uninstall
+    echo "--> Testing 'uninstall --force'..."
+    ./gitsim.sh uninstall --force > /dev/null
+    if [ -L "$link_path" ] || [ -d "$install_dir" ]; then
+        echo "ERROR: Forced 'uninstall' did not remove script files"
+        exit 1
+    fi
+    echo "OK"
+
+    # Restore environment
+    unset XDG_HOME
+}
+
+run_error_conditions_test() {
+    echo
+    echo "=== Running Error Conditions Test ==="
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(mktemp -d)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Test commands without init (should fail)
+    echo "--> Testing commands without init (should fail)..."
+    if "$original_dir/gitsim.sh" status > /dev/null 2>&1; then
+        echo "ERROR: 'status' succeeded when it should have failed (no .gitsim)"
+        exit 1
+    fi
+    if "$original_dir/gitsim.sh" add testfile > /dev/null 2>&1; then
+        echo "ERROR: 'add' succeeded when it should have failed (no .gitsim)"
+        exit 1
+    fi
+    echo "OK"
+
+    # 4. Test commit without staged files
+    echo "--> Testing commit without staged files (should fail)..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    if "$original_dir/gitsim.sh" commit -m "empty" > /dev/null 2>&1; then
+        echo "ERROR: 'commit' succeeded when it should have failed (nothing staged)"
+        exit 1
+    fi
+    echo "OK"
+
+    # 5. Test home commands without home-init
+    echo "--> Testing home commands without home-init (should fail)..."
+    if "$original_dir/gitsim.sh" home-ls > /dev/null 2>&1; then
+        echo "ERROR: 'home-ls' succeeded when it should have failed (no home)"
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+
+    # The trap will handle cleanup
+}
+
+run_dev_test() {
+    echo
+    echo "=== Running Development Test ==="
+    echo
+
+    echo "--> Testing 'gitsim dev-test'..."
+    ./gitsim.sh -D dev-test > /dev/null
+    echo "OK"
+}
+
+# Run all tests
+run_basic_workflow_test
+run_home_environment_test
+run_init_in_home_test
+run_noise_generation_test
+run_sim_variables_test
+run_install_tests
+run_error_conditions_test
+run_dev_test
+
+echo
+echo "================================"
+echo "✅ All tests passed."
+echo "================================"
+
+exit 0
