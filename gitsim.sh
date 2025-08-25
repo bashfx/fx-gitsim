@@ -626,37 +626,6 @@ do_branch() {
 
 }
 
-do_clean() {
-    local sim_root
-    local index_file
-
-    sim_root=$(_find_sim_root) || {
-        error "Not in a git repository (or any of the parent directories): .gitsim"
-        return 128
-    }
-
-    index_file="$sim_root/.gitsim/.data/index"
-
-    if [ ! -s "$index_file" ]; then
-        info "Nothing to clean, staging area is empty."
-        return 0
-    fi
-
-    # Read files from index and delete them
-    while read -r file; do
-        if [ -f "$sim_root/$file" ]; then
-            rm -f "$sim_root/$file"
-            trace "Removed file: $file"
-        fi
-    done < "$index_file"
-
-    # Clear the index file
-    > "$index_file"
-
-    okay "Cleaned the staging area."
-    return 0
-}
-
 do_home_env() {
     local sim_root
     local home_dir
