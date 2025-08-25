@@ -78,14 +78,14 @@ gitsim version
 #### `home-init [project-name]`
 Initialize a simulated home environment with standard directories and dotfiles.
 ```bash
-./git_sim.sh home-init
-./git_sim.sh home-init myproject
+./gitsim.sh home-init
+./gitsim.sh home-init myproject
 ```
 
 #### `home-env`
 Show simulated environment variables (paths to use in your scripts).
 ```bash
-./git_sim.sh home-env
+./gitsim.sh home-env
 # Output:
 # SIM_HOME='/path/to/.gitsim/.home'
 # SIM_XDG_CONFIG_HOME='/path/to/.gitsim/.home/.config'
@@ -95,17 +95,17 @@ Show simulated environment variables (paths to use in your scripts).
 #### `home-path`
 Get the path to the simulated home directory.
 ```bash
-HOME_DIR=$(./git_sim.sh home-path)
+HOME_DIR=$(./gitsim.sh home-path)
 echo "Simulated home: $HOME_DIR"
 ```
 
 #### `home-ls [directory] [ls-options]`
 List contents of simulated home directory.
 ```bash
-./git_sim.sh home-ls          # List home root
-./git_sim.sh home-ls -la      # List with details
-./git_sim.sh home-ls projects # List projects directory
-./git_sim.sh home-ls .config -l
+./gitsim.sh home-ls          # List home root
+./gitsim.sh home-ls -la      # List with details
+./gitsim.sh home-ls projects # List projects directory
+./gitsim.sh home-ls .config -l
 ```
 
 #### `home-vars`
@@ -121,36 +121,36 @@ All standard Git commands are supported with realistic behavior:
 
 ```bash
 # Working with files
-./git_sim.sh add file.txt
-./git_sim.sh add .
-./git_sim.sh status
-./git_sim.sh diff
+./gitsim.sh add file.txt
+./gitsim.sh add .
+./gitsim.sh status
+./gitsim.sh diff
 
 # Commits and history
-./git_sim.sh commit -m "Add new feature"
-./git_sim.sh log
-./git_sim.sh log --oneline
+./gitsim.sh commit -m "Add new feature"
+./gitsim.sh log
+./gitsim.sh log --oneline
 
 # Branches
-./git_sim.sh branch feature/auth
-./git_sim.sh checkout -b bugfix/login
-./git_sim.sh branch -d old-feature
+./gitsim.sh branch feature/auth
+./gitsim.sh checkout -b bugfix/login
+./gitsim.sh branch -d old-feature
 
 # Tags
-./git_sim.sh tag v1.0.0
-./git_sim.sh tag -a v1.1.0 -m "Release 1.1.0"
-./git_sim.sh tag -d v0.9.0
+./gitsim.sh tag v1.0.0
+./gitsim.sh tag -a v1.1.0 -m "Release 1.1.0"
+./gitsim.sh tag -d v0.9.0
 
 # Remotes
-./git_sim.sh remote add origin https://github.com/user/repo.git
-./git_sim.sh remote show origin
-./git_sim.sh fetch
-./git_sim.sh push
+./gitsim.sh remote add origin https://github.com/user/repo.git
+./gitsim.sh remote show origin
+./gitsim.sh fetch
+./gitsim.sh push
 
 # Advanced
-./git_sim.sh reset --soft HEAD~1
-./git_sim.sh describe
-./git_sim.sh rev-parse HEAD
+./gitsim.sh reset --soft HEAD~1
+./gitsim.sh describe
+./gitsim.sh rev-parse HEAD
 ```
 
 ### Test Data Generation
@@ -273,12 +273,12 @@ Test deployment scripts or build tools locally:
 
 ```bash
 # Simulate a project with release history
-./git_sim.sh init-in-home webapp
-PROJECT_DIR=$(./git_sim.sh home-path)/projects/webapp
+./gitsim.sh init-in-home webapp
+PROJECT_DIR=$(./gitsim.sh home-path)/projects/webapp
 
 cd "$PROJECT_DIR"
-../../../git_sim.sh history 20 5
-../../../git_sim.sh noise 15
+../../../gitsim.sh history 20 5
+../../../gitsim.sh noise 15
 
 # Test your deployment script
 your-deploy-script --simulate --project-dir="$PROJECT_DIR"
@@ -290,13 +290,13 @@ Test complex Git workflows or hooks:
 
 ```bash
 # Set up complex branch structure
-./git_sim.sh init
-./git_sim.sh branches 10
+./gitsim.sh init
+./gitsim.sh branches 10
 
 # Create realistic commit history
-./git_sim.sh checkout feature/auth
-./git_sim.sh noise 3
-./git_sim.sh commit -m "Add authentication"
+./gitsim.sh checkout feature/auth
+./gitsim.sh noise 3
+./gitsim.sh commit -m "Add authentication"
 
 # Test your Git hooks or workflow tools
 your-git-tool analyze-branches
@@ -309,10 +309,10 @@ Test applications that depend on specific user environments:
 
 ```bash
 # Test with different user configurations
-SIM_USER=alice SIM_SHELL=/bin/zsh ./git_sim.sh home-init
+SIM_USER=alice SIM_SHELL=/bin/zsh ./gitsim.sh home-init
 
 # Test application behavior
-HOME_PATH=$(./git_sim.sh home-path)
+HOME_PATH=$(./gitsim.sh home-path)
 your-app --home="$HOME_PATH" --user=alice
 ```
 
@@ -347,9 +347,6 @@ Run the comprehensive test suite:
 ```bash
 # Run all tests
 ./test_runner.sh
-
-# Test specific scenarios
-./gitsim.sh -D dev-test
 ```
 
 The test runner covers:
@@ -375,8 +372,8 @@ The test runner covers:
 ### Bash Tests (BATS)
 ```bash
 setup() {
-    ./git_sim.sh init
-    ./git_sim.sh history 5 2
+    ./gitsim.sh init
+    ./gitsim.sh history 5 2
 }
 
 teardown() {
