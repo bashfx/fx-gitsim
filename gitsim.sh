@@ -995,6 +995,10 @@ do_noise() {
     return 0
 }
 
+do_usage() {
+    usage
+}
+
 ################################################################################
 # Core System Functions
 ################################################################################
@@ -1033,6 +1037,7 @@ dispatch() {
         install)        do_install "$@";;
         uninstall)      do_uninstall "$@";;
         version)        do_version "$@";;
+        help)           do_usage "$@";;
         
         *)
             error "Unknown command: $cmd"
@@ -1077,6 +1082,7 @@ SYSTEM:
     install                Install to XDG+ directories
     uninstall --force      Remove installation
     version                Show version information
+    help                   Show this help message
 
 OPTIONS:
     -d, --debug            Enable debug output
