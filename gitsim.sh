@@ -330,6 +330,37 @@ do_home_init() {
     return "$ret"
 }
 
+do_clean() {
+    local sim_root
+    local index_file
+
+    sim_root=$(_find_sim_root) || {
+        error "Not in a git repository (or any of the parent directories): .gitsim"
+        return 128
+    }
+
+    index_file="$sim_root/.gitsim/.data/index"
+
+    if [ ! -s "$index_file" ]; then
+        info "Nothing to clean, staging area is empty."
+        return 0
+    fi
+
+    # Read files from index and delete them
+    while read -r file; do
+        if [ -f "$sim_root/$file" ]; then
+            rm -f "$sim_root/$file"
+            trace "Removed file: $file"
+        fi
+    done < "$index_file"
+
+    # Clear the index file
+    > "$index_file"
+
+    okay "Cleaned the staging area."
+    return 0
+}
+
 do_home_env() {
     local sim_root
     local home_dir
@@ -650,6 +681,7 @@ dispatch() {
         add)            do_add "$@";;
         commit)         do_commit "$@";;
         status)         do_status "$@";;
+        clean)          do_clean "$@";;
         
         # Home environment
         home-init)      do_home_init "$@";;
@@ -687,6 +719,7 @@ CORE COMMANDS:
     add <files>             Add files to staging area
     commit -m "message"     Create a commit with message
     status                  Show repository status
+    clean                   Remove all files from the staging area
 
 HOME ENVIRONMENT:
     home-init [project]     Initialize simulated home environment
