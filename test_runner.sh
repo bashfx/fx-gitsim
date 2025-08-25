@@ -4,6 +4,17 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+: ${GITSIM_TEST_DIR:="$HOME/.cache/gitsim/test"}
+
+# Helper function to create a temporary test directory
+setup_test_dir() {
+    mkdir -p "$GITSIM_TEST_DIR"
+    local test_dir
+    test_dir=$(mktemp -d "$GITSIM_TEST_DIR/gitsim-test.XXXXXX")
+    echo "$test_dir"
+}
+
+
 echo "=== Running Basic GitSim Tests ==="
 echo
 
@@ -30,7 +41,7 @@ run_basic_workflow_test() {
 
     # 1. Create a temporary directory
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(setup_test_dir)
     echo "--> Created temp directory for test: $test_dir"
 
     # 2. Setup a trap to clean up the directory on exit
@@ -105,7 +116,7 @@ run_home_environment_test() {
 
     # 1. Create a temporary directory
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(setup_test_dir)
     echo "--> Created temp directory for test: $test_dir"
 
     # 2. Setup a trap to clean up the directory on exit
@@ -172,7 +183,7 @@ run_init_in_home_test() {
 
     # 1. Create a temporary directory
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(setup_test_dir)
     echo "--> Created temp directory for test: $test_dir"
 
     # 2. Setup a trap to clean up the directory on exit
@@ -218,7 +229,7 @@ run_noise_generation_test() {
 
     # 1. Create a temporary directory
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(setup_test_dir)
     echo "--> Created temp directory for test: $test_dir"
 
     # 2. Setup a trap to clean up the directory on exit
@@ -276,7 +287,7 @@ run_sim_variables_test() {
     # Test with custom SIM variables
     echo "--> Testing with custom SIM_USER..."
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(setup_test_dir)
     # shellcheck disable=SC2064
     trap "rm -rf '$test_dir'" EXIT
     
@@ -309,7 +320,7 @@ run_install_tests() {
 
     # Define paths for clarity (using temporary directories to avoid conflicts)
     local temp_xdg_home
-    temp_xdg_home=$(mktemp -d)
+    temp_xdg_home=$(setup_test_dir)
     local install_dir="$temp_xdg_home/lib/fx/gitsim"
     local link_path="$temp_xdg_home/bin/fx/gitsim"
 
@@ -331,22 +342,31 @@ run_install_tests() {
     fi
     echo "OK"
 
-    # 2. Test uninstall (should fail without --force)
-    echo "--> Testing 'uninstall' without --force (should fail)..."
-    if ./gitsim.sh uninstall > /dev/null 2>&1; then
+    # 2. Test uninstall
+    echo "--> Testing 'uninstall'..."
+    local installed_gitsim="$install_dir/gitsim.sh"
+    if ! "$installed_gitsim" uninstall > /dev/null 2>&1; then
+        echo "OK: uninstall failed without --force, as expected"
+    else
         echo "ERROR: 'uninstall' succeeded when it should have failed (safety check)."
         exit 1
     fi
-    echo "OK"
 
-    # 3. Test forced uninstall
-    echo "--> Testing 'uninstall --force'..."
-    ./gitsim.sh uninstall --force > /dev/null
-    if [ -L "$link_path" ] || [ -d "$install_dir" ]; then
+    local uninstall_output
+    uninstall_output=$("$installed_gitsim" --force uninstall)
+    if [[ "$uninstall_output" == "[OK] Uninstalled gitsim successfully" ]]; then
+        echo "OK: uninstall --force succeeded"
+    else
+        echo "ERROR: 'uninstall --force' failed with output: $uninstall_output"
+        exit 1
+    fi
+
+    if [ ! -L "$link_path" ] && [ ! -d "$install_dir" ]; then
+        echo "OK: uninstalled files are gone"
+    else
         echo "ERROR: Forced 'uninstall' did not remove script files"
         exit 1
     fi
-    echo "OK"
 
     # Restore environment
     unset XDG_HOME
@@ -359,7 +379,7 @@ run_error_conditions_test() {
 
     # 1. Create a temporary directory
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(setup_test_dir)
     echo "--> Created temp directory for test: $test_dir"
 
     # 2. Setup a trap to clean up the directory on exit
@@ -373,32 +393,37 @@ run_error_conditions_test() {
 
     # 3. Test commands without init (should fail)
     echo "--> Testing commands without init (should fail)..."
-    if "$original_dir/gitsim.sh" status > /dev/null 2>&1; then
+    if ! "$original_dir/gitsim.sh" status > /dev/null 2>&1; then
+        echo "OK"
+    else
         echo "ERROR: 'status' succeeded when it should have failed (no .gitsim)"
         exit 1
     fi
-    if "$original_dir/gitsim.sh" add testfile > /dev/null 2>&1; then
+    if ! "$original_dir/gitsim.sh" add testfile > /dev/null 2>&1; then
+        echo "OK"
+    else
         echo "ERROR: 'add' succeeded when it should have failed (no .gitsim)"
         exit 1
     fi
-    echo "OK"
 
     # 4. Test commit without staged files
     echo "--> Testing commit without staged files (should fail)..."
     "$original_dir/gitsim.sh" init > /dev/null
-    if "$original_dir/gitsim.sh" commit -m "empty" > /dev/null 2>&1; then
+    if ! "$original_dir/gitsim.sh" commit -m "empty" > /dev/null 2>&1; then
+        echo "OK"
+    else
         echo "ERROR: 'commit' succeeded when it should have failed (nothing staged)"
         exit 1
     fi
-    echo "OK"
 
     # 5. Test home commands without home-init
     echo "--> Testing home commands without home-init (should fail)..."
-    if "$original_dir/gitsim.sh" home-ls > /dev/null 2>&1; then
+    if ! "$original_dir/gitsim.sh" home-ls > /dev/null 2>&1; then
+        echo "OK"
+    else
         echo "ERROR: 'home-ls' succeeded when it should have failed (no home)"
         exit 1
     fi
-    echo "OK"
 
     # Return to original directory
     cd "$original_dir"
@@ -406,14 +431,66 @@ run_error_conditions_test() {
     # The trap will handle cleanup
 }
 
-run_dev_test() {
+run_clean_test() {
     echo
-    echo "=== Running Development Test ==="
+    echo "=== Running Clean Test ==="
     echo
 
-    echo "--> Testing 'gitsim dev-test'..."
-    ./gitsim.sh -D dev-test > /dev/null
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(setup_test_dir)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
     echo "OK"
+
+    # 4. Generate noise files
+    echo "--> Running 'gitsim noise 5'..."
+    "$original_dir/gitsim.sh" noise 5 > /dev/null
+    echo "OK"
+
+    # 5. Check that noise generation worked
+    echo "--> Verifying noise generation results..."
+    local file_count
+    file_count=$(wc -l < .gitsim/.data/index | tr -d ' ')
+    if [ "$file_count" -ne 5 ]; then
+        echo "ERROR: 'noise' did not create exactly 5 files (got $file_count)"
+        exit 1
+    fi
+    echo "OK"
+
+    # 6. Run clean command
+    echo "--> Running 'gitsim clean'..."
+    "$original_dir/gitsim.sh" clean > /dev/null
+    echo "OK"
+
+    # 7. Check that clean worked
+    echo "--> Verifying clean results..."
+    if [ -s ".gitsim/.data/index" ]; then
+        echo "ERROR: 'clean' did not clear staging area"
+        exit 1
+    fi
+    local actual_files
+    actual_files=$(find . -maxdepth 1 -type f ! -name ".gitignore" | wc -l | tr -d ' ')
+    if [ "$actual_files" -ne 0 ]; then
+        echo "ERROR: 'clean' did not remove files from filesystem (found $actual_files files)"
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
 }
 
 # Run all tests
@@ -424,7 +501,7 @@ run_noise_generation_test
 run_sim_variables_test
 run_install_tests
 run_error_conditions_test
-run_dev_test
+run_clean_test
 
 echo
 echo "================================"

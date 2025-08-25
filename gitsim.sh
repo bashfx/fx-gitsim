@@ -207,8 +207,7 @@ __create_git_structure() {
     
     if mkdir -p "$data_dir"; then
         touch "$data_dir"/{tags.txt,commits.txt,config,index,branches.txt,remotes.txt,HEAD}
-        echo "main" > "$data_dir/branch.txt"
-        echo "main" >> "$data_dir/branches.txt"
+        echo "main" > "$data_dir/branches.txt"
         ret=0
     fi
     
@@ -253,33 +252,28 @@ do_init() {
 
 do_init_in_home() {
     local project_name="${1:-testproject}"
-    local sim_root
+    local sim_root="$PWD"
     local home_dir
     local project_dir
     local ret=1
-    
-    sim_root=$(_find_sim_root) || {
-        # Create a temporary sim root in current directory
-        if __create_git_structure ".gitsim/.data"; then
-            sim_root="$PWD"
-        else
-            error "Failed to create temporary sim root"
-            return 1
-        fi
-    }
-    
+
+    # Always work from a .gitsim in the current directory
+    if [ ! -d "$sim_root/.gitsim" ]; then
+        __create_git_structure "$sim_root/.gitsim/.data" || return 1
+    fi
+
     home_dir=$(_get_sim_home "$sim_root")
-    
+
     # Ensure home is initialized
     if [ ! -d "$home_dir" ]; then
-        do_home_init "$sim_root" "$project_name" || return 1
+        do_home_init "$project_name" || return 1
     fi
-    
+
     project_dir=$(_get_sim_project_dir "$home_dir" "$project_name")
-    
+
     # Create git simulation in the project directory
     local project_data_dir="$project_dir/.gitsim/.data"
-    
+
     if [ -d "$project_data_dir" ]; then
         info "Reinitialized existing Git simulator repository in $project_dir/.gitsim/"
         ret=0
@@ -292,24 +286,22 @@ do_init_in_home() {
             return 1
         fi
     fi
-    
+
     # Create project files
     printf "# %s\n" "$project_name" > "$project_dir/README.md"
     printf "node_modules/\n.gitsim/\n" > "$project_dir/.gitignore"
-    
+
     info "Project path: $project_dir"
     info "To work in this project: cd '$project_dir'"
-    
+
     return "$ret"
 }
 
 do_home_init() {
-    local sim_root="${1:-$PWD}"
-    local project_name="${2:-testproject}"
+    local sim_root="$PWD"
     local home_dir
-    local project_dir
     local ret=1
-    
+
     # Handle case where we don't have a sim_root yet
     if [ ! -d "$sim_root/.gitsim" ]; then
         if __create_git_structure "$sim_root/.gitsim/.data"; then
@@ -319,9 +311,9 @@ do_home_init() {
             return 1
         fi
     fi
-    
+
     home_dir=$(_get_sim_home "$sim_root")
-    
+
     if [ -d "$home_dir" ]; then
         info "Reinitialized simulated home environment at $home_dir"
         ret=0
@@ -334,13 +326,39 @@ do_home_init() {
             return 1
         fi
     fi
-    
-    # Create project directory
-    project_dir=$(_get_sim_project_dir "$home_dir" "$project_name")
-    mkdir -p "$project_dir"
-    okay "Created project directory at $project_dir"
-    
+
     return "$ret"
+}
+
+do_clean() {
+    local sim_root
+    local index_file
+
+    sim_root=$(_find_sim_root) || {
+        error "Not in a git repository (or any of the parent directories): .gitsim"
+        return 128
+    }
+
+    index_file="$sim_root/.gitsim/.data/index"
+
+    if [ ! -s "$index_file" ]; then
+        info "Nothing to clean, staging area is empty."
+        return 0
+    fi
+
+    # Read files from index and delete them
+    while read -r file; do
+        if [ -f "$sim_root/$file" ]; then
+            rm -f "$sim_root/$file"
+            trace "Removed file: $file"
+        fi
+    done < "$index_file"
+
+    # Clear the index file
+    > "$index_file"
+
+    okay "Cleaned the staging area."
+    return 0
 }
 
 do_home_env() {
@@ -482,30 +500,27 @@ do_install() {
 }
 
 do_uninstall() {
-    local ret=1
-    
     if [[ "$opt_force" == false ]]; then
         error "Uninstall requires --force flag for safety"
         info "Use: $GITSIM_NAME uninstall --force"
         return 1
     fi
-    
+
     info "Uninstalling $GITSIM_NAME..."
-    
-    # Remove symlink
-    if [ -L "$GITSIM_BIN_LINK" ]; then
-        rm -f "$GITSIM_BIN_LINK"
-        trace "Removed symlink $GITSIM_BIN_LINK"
-    fi
-    
-    # Remove lib directory
-    if [ -d "$GITSIM_LIB_DIR" ]; then
-        rm -rf "$GITSIM_LIB_DIR"
-        trace "Removed lib directory $GITSIM_LIB_DIR"
-    fi
-    
-    okay "Uninstalled $GITSIM_NAME successfully"
-    return 0
+
+    # Create a temporary script to do the uninstallation
+    local temp_script
+    temp_script=$(mktemp)
+    cat > "$temp_script" <<EOF
+#!/usr/bin/env bash
+rm -f "$GITSIM_BIN_LINK"
+rm -rf "$GITSIM_LIB_DIR"
+echo "[OK] Uninstalled $GITSIM_NAME successfully"
+EOF
+    chmod +x "$temp_script"
+
+    # Execute the temporary script and exit
+    exec "$temp_script"
 }
 
 # Git command implementations would go here - abbreviated for space
@@ -585,7 +600,7 @@ do_commit() {
 do_status() {
     local sim_root
     local index_file
-    local branch_file
+    local branches_file
     local ret=1
     
     sim_root=$(_find_sim_root) || {
@@ -594,7 +609,7 @@ do_status() {
     }
     
     index_file="$sim_root/.gitsim/.data/index"
-    branch_file="$sim_root/.gitsim/.data/branch.txt"
+    branches_file="$sim_root/.gitsim/.data/branches.txt"
     
     if [[ "$1" == "--porcelain" ]]; then
         if [ -s "$index_file" ]; then
@@ -605,7 +620,7 @@ do_status() {
     
     # Human-readable output
     local branch
-    branch=$(cat "$branch_file" 2>/dev/null)
+    branch=$(tail -n 1 "$branches_file" 2>/dev/null)
     printf "On branch %s\n" "${branch:-main}"
     
     if [ -s "$index_file" ]; then
@@ -652,55 +667,6 @@ do_noise() {
 }
 
 ################################################################################
-# Development Functions
-################################################################################
-
-dev_test_all() {
-    local test_dir
-    local ret=1
-    
-    info "Running comprehensive development tests..."
-    
-    # Create temporary test environment
-    test_dir=$(mktemp -d)
-    trace "Created test directory: $test_dir"
-    
-    # Store original directory
-    local original_dir="$PWD"
-    
-    # Test basic init
-    if (cd "$test_dir" && "$original_dir/$0" init); then
-        okay "Basic init test passed"
-    else
-        error "Basic init test failed"
-        return 1
-    fi
-    
-    # Test home init
-    if (cd "$test_dir" && "$original_dir/$0" home-init); then
-        okay "Home init test passed"
-    else
-        error "Home init test failed"
-        return 1
-    fi
-    
-    # Test init-in-home
-    if (cd "$test_dir" && "$original_dir/$0" init-in-home testproject); then
-        okay "Init-in-home test passed"
-    else
-        error "Init-in-home test failed"
-        return 1
-    fi
-    
-    # Cleanup
-    rm -rf "$test_dir"
-    trace "Cleaned up test directory"
-    
-    okay "All development tests passed"
-    return 0
-}
-
-################################################################################
 # Core System Functions
 ################################################################################
 
@@ -715,6 +681,7 @@ dispatch() {
         add)            do_add "$@";;
         commit)         do_commit "$@";;
         status)         do_status "$@";;
+        clean)          do_clean "$@";;
         
         # Home environment
         home-init)      do_home_init "$@";;
@@ -730,9 +697,6 @@ dispatch() {
         install)        do_install "$@";;
         uninstall)      do_uninstall "$@";;
         version)        do_version "$@";;
-        
-        # Development
-        dev-test)       dev_test_all "$@";;
         
         *)
             error "Unknown command: $cmd"
@@ -755,6 +719,7 @@ CORE COMMANDS:
     add <files>             Add files to staging area
     commit -m "message"     Create a commit with message
     status                  Show repository status
+    clean                   Remove all files from the staging area
 
 HOME ENVIRONMENT:
     home-init [project]     Initialize simulated home environment
@@ -880,5 +845,6 @@ main() {
     dispatch "$@"
 }
 
-# Script execution
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
