@@ -20,10 +20,11 @@ readonly GITSIM_NAME="gitsim"
 
 # XDG+ Base Configuration
 : ${XDG_HOME:="$HOME/.local"}
-: ${XDG_LIB_HOME:="$XDG_HOME/lib"}
-: ${XDG_BIN_HOME:="$XDG_HOME/bin"}
-: ${XDG_ETC_HOME:="$XDG_HOME/etc"}
-: ${XDG_DATA_HOME:="$XDG_HOME/data"}
+# Always derive these from XDG_HOME to ensure consistency when XDG_HOME is overridden
+XDG_LIB_HOME="$XDG_HOME/lib"
+XDG_BIN_HOME="$XDG_HOME/bin"
+XDG_ETC_HOME="$XDG_HOME/etc"
+XDG_DATA_HOME="$XDG_HOME/data"
 : ${XDG_CACHE_HOME:="$HOME/.cache"}
 
 # BashFX FX-specific paths
