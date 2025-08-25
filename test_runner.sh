@@ -432,6 +432,7 @@ run_error_conditions_test() {
 }
 
 run_clean_test() {
+
     echo
     echo "=== Running Clean Test ==="
     echo
@@ -493,6 +494,418 @@ run_clean_test() {
     cd "$original_dir"
 }
 
+run_branch_test() {
+    echo
+    echo "=== Running Branch Test ==="
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(setup_test_dir)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    echo "OK"
+
+    # 4. List branches
+    echo "--> Running 'gitsim branch'..."
+    local branch_output
+    branch_output=$("$original_dir/gitsim.sh" branch)
+    if [[ "$branch_output" != "* main" ]]; then
+        echo "ERROR: 'branch' did not list main branch correctly"
+        exit 1
+    fi
+    echo "OK"
+
+    # 5. Create a new branch
+    echo "--> Running 'gitsim branch new-feature'..."
+    "$original_dir/gitsim.sh" branch new-feature > /dev/null
+    echo "OK"
+
+    # 6. List branches again
+    echo "--> Running 'gitsim branch'..."
+    branch_output=$("$original_dir/gitsim.sh" branch)
+    expected_output="* main"$'\n'"  new-feature"
+    if [[ "$branch_output" != "$expected_output" ]]; then
+        echo "ERROR: 'branch' did not list new branch correctly"
+        exit 1
+    fi
+    echo "OK"
+
+    # 7. Delete a branch
+    echo "--> Running 'gitsim branch -d new-feature'..."
+    "$original_dir/gitsim.sh" branch -d new-feature > /dev/null
+    echo "OK"
+
+    # 8. List branches again
+    echo "--> Running 'gitsim branch'..."
+    branch_output=$("$original_dir/gitsim.sh" branch)
+    if [[ "$branch_output" != "* main" ]]; then
+        echo "ERROR: 'branch' did not delete branch correctly"
+        exit 1
+    fi
+    echo "OK"
+
+    # 9. Try to delete current branch (should fail)
+    echo "--> Running 'gitsim branch -d main' (should fail)..."
+    if ! "$original_dir/gitsim.sh" branch -d main > /dev/null 2>&1; then
+        echo "OK"
+    else
+        echo "ERROR: 'branch -d main' succeeded when it should have failed"
+        exit 1
+    fi
+
+    # Return to original directory
+    cd "$original_dir"
+}
+
+run_checkout_test() {
+    echo
+    echo "=== Running Checkout Test ==="
+
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(setup_test_dir)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    echo "OK"
+
+    # 4. Create a new branch
+    echo "--> Running 'gitsim branch new-feature'..."
+    "$original_dir/gitsim.sh" branch new-feature > /dev/null
+    echo "OK"
+
+    # 5. Checkout the new branch
+    echo "--> Running 'gitsim checkout new-feature'..."
+    "$original_dir/gitsim.sh" checkout new-feature > /dev/null
+    echo "OK"
+
+    # 6. Check that the current branch is new-feature
+    echo "--> Running 'gitsim branch'..."
+    local branch_output
+    branch_output=$("$original_dir/gitsim.sh" branch)
+    if ! echo "$branch_output" | grep -q '^* new-feature$'; then
+        echo "ERROR: 'checkout' did not switch to the new branch"
+        exit 1
+    fi
+    echo "OK"
+
+    # 7. Checkout back to main
+    echo "--> Running 'gitsim checkout main'..."
+    "$original_dir/gitsim.sh" checkout main > /dev/null
+    echo "OK"
+
+    # 8. Check that the current branch is main
+    echo "--> Running 'gitsim branch'..."
+    branch_output=$("$original_dir/gitsim.sh" branch)
+    if ! echo "$branch_output" | grep -q '^* main$'; then
+        echo "ERROR: 'checkout' did not switch back to main"
+        exit 1
+    fi
+    echo "OK"
+
+    # 9. Create and checkout a new branch with -b
+    echo "--> Running 'gitsim checkout -b another-feature'..."
+    "$original_dir/gitsim.sh" checkout -b another-feature > /dev/null
+    echo "OK"
+
+    # 10. Check that the current branch is another-feature
+    echo "--> Running 'gitsim branch'..."
+    branch_output=$("$original_dir/gitsim.sh" branch)
+    if ! echo "$branch_output" | grep -q '^* another-feature$'; then
+        echo "ERROR: 'checkout -b' did not switch to the new branch"
+
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+}
+
+run_tag_test() {
+    echo
+    echo "=== Running Tag Test ==="
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(setup_test_dir)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    echo "OK"
+
+    # 4. Create a new tag
+    echo "--> Running 'gitsim tag v1.0.0'..."
+    "$original_dir/gitsim.sh" tag v1.0.0 > /dev/null
+    echo "OK"
+
+    # 5. List tags
+    echo "--> Running 'gitsim tag'..."
+    local tag_output
+    tag_output=$("$original_dir/gitsim.sh" tag)
+    if [[ "$tag_output" != "v1.0.0" ]]; then
+        echo "ERROR: 'tag' did not list new tag correctly"
+        exit 1
+    fi
+    echo "OK"
+
+    # 6. Create another tag
+    echo "--> Running 'gitsim tag v1.1.0'..."
+    "$original_dir/gitsim.sh" tag v1.1.0 > /dev/null
+    echo "OK"
+
+    # 7. List tags again
+    echo "--> Running 'gitsim tag'..."
+    tag_output=$("$original_dir/gitsim.sh" tag)
+    expected_output="v1.0.0"$'\n'"v1.1.0"
+    if [[ "$tag_output" != "$expected_output" ]]; then
+        echo "ERROR: 'tag' did not list new tag correctly"
+        exit 1
+    fi
+    echo "OK"
+
+    # 8. Delete a tag
+    echo "--> Running 'gitsim tag -d v1.0.0'..."
+    "$original_dir/gitsim.sh" tag -d v1.0.0 > /dev/null
+    echo "OK"
+
+    # 9. List tags again
+    echo "--> Running 'gitsim tag'..."
+    tag_output=$("$original_dir/gitsim.sh" tag)
+    if [[ "$tag_output" != "v1.1.0" ]]; then
+        echo "ERROR: 'tag' did not delete tag correctly"
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+}
+
+run_reset_test() {
+    echo
+    echo "=== Running Reset Test ==="
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(setup_test_dir)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    echo "OK"
+
+    # 4. Generate noise files
+    echo "--> Running 'gitsim noise 5'..."
+    "$original_dir/gitsim.sh" noise 5 > /dev/null
+    echo "OK"
+
+    # 5. Run reset command
+    echo "--> Running 'gitsim reset'..."
+    "$original_dir/gitsim.sh" reset > /dev/null
+    echo "OK"
+
+    # 6. Check that reset worked
+    echo "--> Verifying reset results..."
+    if [ -s ".gitsim/.data/index" ]; then
+        echo "ERROR: 'reset' did not clear staging area"
+
+        exit 1
+    fi
+    local actual_files
+    actual_files=$(find . -maxdepth 1 -type f ! -name ".gitignore" | wc -l | tr -d ' ')
+    if [ "$actual_files" -ne 0 ]; then
+
+        echo "ERROR: 'reset' did not remove files from filesystem (found $actual_files files)"
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+}
+
+run_template_test() {
+    echo
+    echo "=== Running Template Test ==="
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(setup_test_dir)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation in home with node template
+    echo "--> Running 'gitsim init-in-home my-node-app --template=node'..."
+    "$original_dir/gitsim.sh" init-in-home my-node-app --template=node > /dev/null
+    echo "OK"
+
+    # 4. Check that the template was created correctly
+    echo "--> Verifying template results..."
+    local project_dir
+    project_dir="$test_dir/.gitsim/.home/projects/my-node-app"
+    if [ ! -f "$project_dir/package.json" ]; then
+        echo "ERROR: 'init-in-home --template=node' did not create package.json"
+        exit 1
+    fi
+    echo "OK"
+
+    # 5. Initialize git simulation in home with rust template
+    echo "--> Running 'gitsim init-in-home my-rust-app --template=rust'..."
+    "$original_dir/gitsim.sh" init-in-home my-rust-app --template=rust > /dev/null
+    echo "OK"
+
+    # 6. Check that the template was created correctly
+    echo "--> Verifying template results..."
+    project_dir="$test_dir/.gitsim/.home/projects/my-rust-app"
+    if [ ! -f "$project_dir/Cargo.toml" ] || [ ! -d "$project_dir/src" ] || [ ! -f "$project_dir/src/main.rs" ]; then
+        echo "ERROR: 'init-in-home --template=rust' did not create rust project structure"
+        exit 1
+    fi
+    echo "OK"
+
+    # 7. Initialize git simulation in home with python template
+    echo "--> Running 'gitsim init-in-home my-python-app --template=python'..."
+    "$original_dir/gitsim.sh" init-in-home my-python-app --template=python > /dev/null
+    echo "OK"
+
+    # 8. Check that the template was created correctly
+    echo "--> Verifying template results..."
+    project_dir="$test_dir/.gitsim/.home/projects/my-python-app"
+    if [ ! -f "$project_dir/requirements.txt" ] || [ ! -f "$project_dir/main.py" ]; then
+        echo "ERROR: 'init-in-home --template=python' did not create python project structure"
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+}
+
+run_noise_enhancement_test() {
+    echo
+    echo "=== Running Noise Enhancement Test ==="
+    echo
+
+    # 1. Create a temporary directory
+    local test_dir
+    test_dir=$(setup_test_dir)
+    echo "--> Created temp directory for test: $test_dir"
+
+    # 2. Setup a trap to clean up the directory on exit
+    # shellcheck disable=SC2064
+    trap "echo '--> Cleaning up temp directory...'; rm -rf '$test_dir'" EXIT
+
+    # Store current directory and cd into test dir
+    local original_dir
+    original_dir=$(pwd)
+    cd "$test_dir"
+
+    # 3. Initialize git simulation
+    echo "--> Running 'gitsim init'..."
+    "$original_dir/gitsim.sh" init > /dev/null
+    echo "OK"
+
+    # 4. Generate js noise files
+    echo "--> Running 'gitsim noise 3 --type=js'..."
+    "$original_dir/gitsim.sh" noise 3 --type=js > /dev/null
+    echo "OK"
+
+    # 5. Check that js noise generation worked
+    echo "--> Verifying js noise generation results..."
+    if ! ls script_1.js > /dev/null 2>&1 || ! ls script_2.js > /dev/null 2>&1 || ! ls script_3.js > /dev/null 2>&1; then
+        echo "ERROR: 'noise --type=js' did not create js files"
+        exit 1
+    fi
+    if ! grep -q "console.log" script_1.js; then
+        echo "ERROR: 'noise --type=js' did not create correct content"
+        exit 1
+    fi
+    echo "OK"
+
+    # 6. Clean the staging area
+    "$original_dir/gitsim.sh" clean > /dev/null
+
+    # 7. Generate py noise files
+    echo "--> Running 'gitsim noise 2 --type=py'..."
+    "$original_dir/gitsim.sh" noise 2 --type=py > /dev/null
+    echo "OK"
+
+    # 8. Check that py noise generation worked
+    echo "--> Verifying py noise generation results..."
+    if ! ls script_1.py > /dev/null 2>&1 || ! ls script_2.py > /dev/null 2>&1; then
+        echo "ERROR: 'noise --type=py' did not create py files"
+        exit 1
+    fi
+    if ! grep -q "print" script_1.py; then
+        echo "ERROR: 'noise --type=py' did not create correct content"
+
+        exit 1
+    fi
+    echo "OK"
+
+    # Return to original directory
+    cd "$original_dir"
+}
+
 # Run all tests
 run_basic_workflow_test
 run_home_environment_test
@@ -502,6 +915,13 @@ run_sim_variables_test
 run_install_tests
 run_error_conditions_test
 run_clean_test
+run_branch_test
+run_checkout_test
+run_tag_test
+run_reset_test
+run_template_test
+run_noise_enhancement_test
+
 
 echo
 echo "================================"

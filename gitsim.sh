@@ -225,6 +225,184 @@ __add_gitignore_entry() {
     return 0
 }
 
+__print_package_json() {
+    local file="$1"
+    local project_name="$2"
+
+    cat > "$file" << EOF
+{
+  "name": "$project_name",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
+EOF
+    return $?
+}
+
+__print_cargo_toml() {
+    local file="$1"
+    local project_name="$2"
+
+    cat > "$file" << EOF
+[package]
+name = "$project_name"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+EOF
+    return $?
+}
+
+__print_requirements_txt() {
+    local file="$1"
+
+    cat > "$file" << EOF
+# Add your python dependencies here
+EOF
+    return $?
+}
+
+do_template() {
+    local template_name="$1"
+    local project_name="${2:-testproject}"
+
+    if [ -z "$template_name" ]; then
+        error "template name required"
+        return 1
+    fi
+
+    local sim_root="$PWD"
+    if [ ! -d "$sim_root/.gitsim" ]; then
+        do_init || return 1
+    fi
+
+    case "$template_name" in
+        node)
+            __print_package_json "package.json" "$project_name"
+            okay "Created node project template in $(pwd)"
+            ;;
+        rust)
+            __print_cargo_toml "Cargo.toml" "$project_name"
+            mkdir -p src
+            touch src/main.rs
+            okay "Created rust project template in $(pwd)"
+            ;;
+        python)
+            __print_requirements_txt "requirements.txt"
+            touch main.py
+            okay "Created python project template in $(pwd)"
+            ;;
+        *)
+            error "Unknown template: $template_name"
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+do_tag() {
+    local sim_root
+    local tags_file
+
+    sim_root=$(_find_sim_root) || {
+        error "Not in a git repository (or any of the parent directories): .gitsim"
+        return 128
+    }
+
+    tags_file="$sim_root/.gitsim/.data/tags.txt"
+
+    if [[ $# -eq 0 ]]; then
+        # List tags
+        sort "$tags_file"
+        return 0
+    fi
+
+    case "$1" in
+        -d)
+            # Delete tag
+            local tag_to_delete="$2"
+            if [ -z "$tag_to_delete" ]; then
+                error "tag name required"
+                return 1
+            fi
+            if ! grep -q "^$tag_to_delete$" "$tags_file"; then
+                error "tag '$tag_to_delete' not found"
+                return 1
+            fi
+            grep -v "^$tag_to_delete$" "$tags_file" > "$tags_file.tmp" && mv "$tags_file.tmp" "$tags_file"
+            okay "Deleted tag '$tag_to_delete' (was 1234567)"
+            ;;
+        *)
+            # Create tag
+            local new_tag="$1"
+            if grep -q "^$new_tag$" "$tags_file"; then
+                error "tag '$new_tag' already exists"
+                return 1
+            fi
+            echo "$new_tag" >> "$tags_file"
+            okay "Created tag '$new_tag'"
+            ;;
+    esac
+
+    return 0
+}
+
+do_checkout() {
+    local sim_root
+    local branches_file
+
+    sim_root=$(_find_sim_root) || {
+        error "Not in a git repository (or any of the parent directories): .gitsim"
+        return 128
+    }
+
+    branches_file="$sim_root/.gitsim/.data/branches.txt"
+
+    if [[ "$1" == "-b" ]]; then
+        # Create and switch to a new branch
+        local new_branch="$2"
+        if [ -z "$new_branch" ]; then
+            error "branch name required"
+            return 1
+        fi
+        if grep -q "^$new_branch$" "$branches_file"; then
+            error "A branch named '$new_branch' already exists."
+            return 1
+        fi
+        echo "$new_branch" >> "$branches_file"
+        okay "Switched to a new branch '$new_branch'"
+    else
+        # Switch to an existing branch
+        local branch_to_checkout="$1"
+        if [ -z "$branch_to_checkout" ]; then
+            error "branch name required"
+            return 1
+        fi
+        if ! grep -q "^$branch_to_checkout$" "$branches_file"; then
+            error "pathspec '$branch_to_checkout' did not match any file(s) known to git"
+            return 1
+        fi
+
+        # Reorder branches to make the checked out branch the last one
+        grep -v "^$branch_to_checkout$" "$branches_file" > "$branches_file.tmp"
+        echo "$branch_to_checkout" >> "$branches_file.tmp"
+        mv "$branches_file.tmp" "$branches_file"
+
+        okay "Switched to branch '$branch_to_checkout'"
+    fi
+
+    return 0
+}
+
 ################################################################################
 # Dispatchable Functions (High-Order)
 ################################################################################
@@ -251,7 +429,24 @@ do_init() {
 }
 
 do_init_in_home() {
-    local project_name="${1:-testproject}"
+
+    local project_name="testproject"
+    local template_name=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --template=*)
+                template_name="${1#*=}"
+                shift
+                ;;
+            *)
+                project_name="$1"
+                shift
+                ;;
+        esac
+    done
+
+
     local sim_root="$PWD"
     local home_dir
     local project_dir
@@ -288,7 +483,11 @@ do_init_in_home() {
     fi
 
     # Create project files
-    printf "# %s\n" "$project_name" > "$project_dir/README.md"
+    if [ -n "$template_name" ]; then
+        (cd "$project_dir" && do_template "$template_name" "$project_name")
+    else
+        printf "# %s\n" "$project_name" > "$project_dir/README.md"
+    fi
     printf "node_modules/\n.gitsim/\n" > "$project_dir/.gitignore"
 
     info "Project path: $project_dir"
@@ -328,6 +527,103 @@ do_home_init() {
     fi
 
     return "$ret"
+
+}
+
+do_clean() {
+    local sim_root
+    local index_file
+    
+    sim_root=$(_find_sim_root) || {
+        error "Not in a git repository (or any of the parent directories): .gitsim"
+        return 128
+    }
+    
+    index_file="$sim_root/.gitsim/.data/index"
+
+    if [ ! -s "$index_file" ]; then
+        info "Nothing to clean, staging area is empty."
+        return 0
+    fi
+
+    # Read files from index and delete them
+    while read -r file; do
+        if [ -f "$sim_root/$file" ]; then
+            rm -f "$sim_root/$file"
+            trace "Removed file: $file"
+        fi
+    done < "$index_file"
+
+    # Clear the index file
+    > "$index_file"
+
+    okay "Cleaned the staging area."
+    return 0
+}
+
+do_branch() {
+    local sim_root
+    local branches_file
+
+    sim_root=$(_find_sim_root) || {
+        error "Not in a git repository (or any of the parent directories): .gitsim"
+        return 128
+    }
+
+    branches_file="$sim_root/.gitsim/.data/branches.txt"
+
+    if [[ $# -eq 0 ]]; then
+        # List branches
+        local current_branch
+        current_branch=$(tail -n 1 "$branches_file")
+        printf "* %s\n" "$current_branch"
+
+        # Print other branches
+        grep -v "^$current_branch$" "$branches_file" | while read -r branch; do
+            printf "  %s\n" "$branch"
+        done
+        return 0
+    fi
+
+    case "$1" in
+        -d)
+            # Delete branch
+            local branch_to_delete="$2"
+            if [ -z "$branch_to_delete" ]; then
+                error "branch name required"
+                return 1
+            fi
+            local current_branch
+            current_branch=$(tail -n 1 "$branches_file")
+            if [[ "$branch_to_delete" == "$current_branch" ]]; then
+                error "Cannot delete branch '$branch_to_delete': checked out"
+                return 1
+            fi
+            if ! grep -q "^$branch_to_delete$" "$branches_file"; then
+                error "branch '$branch_to_delete' not found"
+                return 1
+            fi
+            grep -v "^$branch_to_delete$" "$branches_file" > "$branches_file.tmp" && mv "$branches_file.tmp" "$branches_file"
+            okay "Deleted branch $branch_to_delete."
+            ;;
+        *)
+            # Create branch
+            local new_branch="$1"
+            if grep -q "^$new_branch$" "$branches_file"; then
+                error "A branch named '$new_branch' already exists."
+                return 1
+            fi
+
+            echo "$new_branch" > "$branches_file.tmp"
+            cat "$branches_file" >> "$branches_file.tmp"
+            mv "$branches_file.tmp" "$branches_file"
+
+            okay "Created branch $new_branch."
+            ;;
+    esac
+
+    return 0
+
 }
 
 do_clean() {
@@ -637,9 +933,24 @@ do_status() {
 
 # Test data generation functions
 do_noise() {
+    local num_files=1
+    local file_type=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --type=*)
+                file_type="${1#*=}"
+                shift
+                ;;
+            *)
+                num_files="$1"
+                shift
+                ;;
+        esac
+    done
+
     local sim_root
     local data_dir
-    local num_files="${1:-1}"
     local ret=1
     
     sim_root=$(_find_sim_root) || {
@@ -653,11 +964,29 @@ do_noise() {
     local exts=(".md" ".fake" ".log" ".sh" ".txt" ".tmp" ".json" ".yml" ".xml" ".conf")
 
     for i in $(seq 1 "$num_files"); do
-        local rand_name=${names[$RANDOM % ${#names[@]}]}
-        local rand_ext=${exts[$RANDOM % ${#exts[@]}]}
-        local filename="${rand_name}_${i}${rand_ext}"
-
-        head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32 > "$sim_root/$filename"
+        local filename
+        local content
+        case "$file_type" in
+            js)
+                filename="script_${i}.js"
+                content="console.log('hello world');"
+                ;;
+            py)
+                filename="script_${i}.py"
+                content="print('hello world')"
+                ;;
+            rs)
+                filename="script_${i}.rs"
+                content="fn main() { println!(\"hello world\"); }"
+                ;;
+            *)
+                local rand_name=${names[$RANDOM % ${#names[@]}]}
+                local rand_ext=${exts[$RANDOM % ${#exts[@]}]}
+                filename="${rand_name}_${i}${rand_ext}"
+                content=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
+                ;;
+        esac
+        echo "$content" > "$sim_root/$filename"
         echo "$filename" >> "$data_dir/index"
     done
 
@@ -682,6 +1011,13 @@ dispatch() {
         commit)         do_commit "$@";;
         status)         do_status "$@";;
         clean)          do_clean "$@";;
+
+        branch)         do_branch "$@";;
+        checkout)       do_checkout "$@";;
+        tag)            do_tag "$@";;
+        reset)          do_clean "$@";;
+        template)       do_template "$@";;
+
         
         # Home environment
         home-init)      do_home_init "$@";;
@@ -720,6 +1056,12 @@ CORE COMMANDS:
     commit -m "message"     Create a commit with message
     status                  Show repository status
     clean                   Remove all files from the staging area
+    branch                  List, create, or delete branches
+    checkout                Switch branches or create a new branch
+    tag                     Create, list, or delete a tag
+    reset                   Unstage all files
+    template                Create a project from a template
+
 
 HOME ENVIRONMENT:
     home-init [project]     Initialize simulated home environment
