@@ -432,6 +432,7 @@ run_error_conditions_test() {
 }
 
 run_clean_test() {
+
     echo
     echo "=== Running Clean Test ==="
     echo
@@ -572,6 +573,7 @@ run_branch_test() {
 run_checkout_test() {
     echo
     echo "=== Running Checkout Test ==="
+
     echo
 
     # 1. Create a temporary directory
@@ -637,6 +639,7 @@ run_checkout_test() {
     branch_output=$("$original_dir/gitsim.sh" branch)
     if ! echo "$branch_output" | grep -q '^* another-feature$'; then
         echo "ERROR: 'checkout -b' did not switch to the new branch"
+
         exit 1
     fi
     echo "OK"
@@ -755,11 +758,13 @@ run_reset_test() {
     echo "--> Verifying reset results..."
     if [ -s ".gitsim/.data/index" ]; then
         echo "ERROR: 'reset' did not clear staging area"
+
         exit 1
     fi
     local actual_files
     actual_files=$(find . -maxdepth 1 -type f ! -name ".gitignore" | wc -l | tr -d ' ')
     if [ "$actual_files" -ne 0 ]; then
+
         echo "ERROR: 'reset' did not remove files from filesystem (found $actual_files files)"
         exit 1
     fi
@@ -892,6 +897,7 @@ run_noise_enhancement_test() {
     fi
     if ! grep -q "print" script_1.py; then
         echo "ERROR: 'noise --type=py' did not create correct content"
+
         exit 1
     fi
     echo "OK"
@@ -915,6 +921,7 @@ run_tag_test
 run_reset_test
 run_template_test
 run_noise_enhancement_test
+
 
 echo
 echo "================================"

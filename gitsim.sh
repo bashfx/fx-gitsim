@@ -429,6 +429,7 @@ do_init() {
 }
 
 do_init_in_home() {
+
     local project_name="testproject"
     local template_name=""
 
@@ -444,6 +445,7 @@ do_init_in_home() {
                 ;;
         esac
     done
+
 
     local sim_root="$PWD"
     local home_dir
@@ -525,6 +527,7 @@ do_home_init() {
     fi
 
     return "$ret"
+
 }
 
 do_clean() {
@@ -619,6 +622,38 @@ do_branch() {
             ;;
     esac
 
+    return 0
+
+}
+
+do_clean() {
+    local sim_root
+    local index_file
+
+    sim_root=$(_find_sim_root) || {
+        error "Not in a git repository (or any of the parent directories): .gitsim"
+        return 128
+    }
+
+    index_file="$sim_root/.gitsim/.data/index"
+
+    if [ ! -s "$index_file" ]; then
+        info "Nothing to clean, staging area is empty."
+        return 0
+    fi
+
+    # Read files from index and delete them
+    while read -r file; do
+        if [ -f "$sim_root/$file" ]; then
+            rm -f "$sim_root/$file"
+            trace "Removed file: $file"
+        fi
+    done < "$index_file"
+
+    # Clear the index file
+    > "$index_file"
+
+    okay "Cleaned the staging area."
     return 0
 }
 
@@ -976,11 +1011,13 @@ dispatch() {
         commit)         do_commit "$@";;
         status)         do_status "$@";;
         clean)          do_clean "$@";;
+
         branch)         do_branch "$@";;
         checkout)       do_checkout "$@";;
         tag)            do_tag "$@";;
         reset)          do_clean "$@";;
         template)       do_template "$@";;
+
         
         # Home environment
         home-init)      do_home_init "$@";;
@@ -1024,6 +1061,7 @@ CORE COMMANDS:
     tag                     Create, list, or delete a tag
     reset                   Unstage all files
     template                Create a project from a template
+
 
 HOME ENVIRONMENT:
     home-init [project]     Initialize simulated home environment
