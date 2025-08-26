@@ -20,12 +20,14 @@ readonly GITSIM_NAME="gitsim"
 
 # XDG+ Base Configuration
 : ${XDG_HOME:="$HOME/.local"}
-# Always derive these from XDG_HOME to ensure consistency when XDG_HOME is overridden
-XDG_LIB_HOME="$XDG_HOME/lib"
-XDG_BIN_HOME="$XDG_HOME/bin"
-XDG_ETC_HOME="$XDG_HOME/etc"
-XDG_DATA_HOME="$XDG_HOME/data"
+: ${XDG_LIB_HOME:="$XDG_HOME/lib"}
+: ${XDG_BIN_HOME:="$XDG_HOME/bin"}
+: ${XDG_ETC_HOME:="$XDG_HOME/etc"}
+: ${XDG_DATA_HOME:="$XDG_HOME/data"}
 : ${XDG_CACHE_HOME:="$HOME/.cache"}
+
+# Temp directory preference (respects user's cache preference)
+: ${TMPDIR:="$XDG_CACHE_HOME/tmp"}
 
 # BashFX FX-specific paths
 readonly GITSIM_LIB_DIR="$XDG_LIB_HOME/fx/$GITSIM_NAME"
@@ -63,6 +65,99 @@ trace() { [[ "$opt_trace" == false ]] && return; stderr "[TRACE] $*"; }
 # Helper Functions
 ################################################################################
 
+# Print logo from figlet block
+_logo() {
+    local show_logo="${1:-true}"
+    
+    if [[ "$show_logo" == "false" ]]; then
+        return 0
+    fi
+    
+    cat << 'EOF'
+┌─┐┬┌┬┐┌─┐┬┌┬┐
+│ ┬│ │ └─┐││││
+└─┘┴ ┴ └─┘┴┴ ┴
+EOF
+}
+
+# Create a temporary directory in user's cache instead of /tmp
+_mktemp_dir() {
+    local temp_base="${XDG_CACHE_HOME}/gitsim-tmp"
+    mkdir -p "$temp_base"
+    mktemp -d "$temp_base/XXXXXX"
+}
+
+# Track generated files for cleanup
+_track_generated_file() {
+    local file="$1"
+    local simrc_file=".simrc"
+    
+    # Ensure .simrc exists
+    if [[ ! -f "$simrc_file" ]]; then
+        warn "No .simrc file found to track generated files"
+        return 1
+    fi
+    
+    # Add to GENERATED_FILES array if not already present
+    if ! grep -q "GENERATED_FILES.*$file" "$simrc_file"; then
+        # Check if GENERATED_FILES array exists
+        if grep -q "GENERATED_FILES=" "$simrc_file"; then
+            # Array exists, append to it
+            sed -i "s/GENERATED_FILES=(/GENERATED_FILES=(\"$file\" /" "$simrc_file"
+        else
+            # Array doesn't exist, create it
+            echo "GENERATED_FILES=(\"$file\")" >> "$simrc_file"
+        fi
+    fi
+}
+
+# Safety check: ensure we're in a safe location for file generation
+_is_safe_for_generation() {
+    local current_dir="$PWD"
+    
+    # Safe if we're in a .gitsim directory structure
+    if [[ "$current_dir" == *"/.gitsim/"* ]] || [[ "$current_dir" == *"/.gitsim" ]]; then
+        return 0
+    fi
+    
+    # Safe if we have a .gitsim directory (our simulation root)
+    if [[ -d ".gitsim" ]]; then
+        return 0
+    fi
+    
+    # Unsafe if we're in a real git repo without .gitsim
+    if [[ -d ".git" ]] && [[ ! -d ".gitsim" ]]; then
+        return 1
+    fi
+    
+    # Default to safe for other cases
+    return 0
+}
+    local simrc_file=".simrc"
+    
+    if [ -f "$simrc_file" ]; then
+        trace "Sourcing $simrc_file"
+        # shellcheck disable=SC1090
+        source "$simrc_file"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Check if we should offer to create .simrc
+_check_simrc() {
+    local simrc_file=".simrc"
+    
+    if [ ! -f "$simrc_file" ]; then
+        warn "No .simrc file found in current directory"
+        info "Run 'gitsim rcgen' to create a configuration file for SIM_ variables"
+        return 1
+    fi
+    
+    return 0
+}
+
 # Find the root of the simulated repository by searching upwards for .gitsim
 _find_sim_root() {
     local dir="$PWD"
@@ -76,14 +171,18 @@ _find_sim_root() {
     return 1
 }
 
-# Get the simulated home directory
-_get_sim_home() {
+# Create a temporary directory in user's cache instead of /tmp
+_mktemp_dir() {
+    local temp_base="${XDG_CACHE_HOME}/gitsim-tmp"
+    mkdir -p "$temp_base"
+    mktemp -d "$temp_base/XXXXXX"
+}
     local sim_root="$1"
     printf "%s" "$sim_root/.gitsim/.home"
 }
 
-# Get the simulated project directory within home
-_get_sim_project_dir() {
+# Get the simulated home directory
+_get_sim_home() {
     local home_dir="$1"
     local project_name="${2:-testproject}"
     printf "%s" "$home_dir/projects/$project_name"
@@ -151,6 +250,20 @@ EOF
     return $?
 }
 
+do_home_vars() {
+    printf "Current SIM_ environment variables:\n"
+    printf "SIM_HOME=%s\n" "$SIM_HOME"
+    printf "SIM_USER=%s\n" "$SIM_USER"
+    printf "SIM_SHELL=%s\n" "$SIM_SHELL"
+    printf "SIM_EDITOR=%s\n" "$SIM_EDITOR"  
+    printf "SIM_LANG=%s\n" "$SIM_LANG"
+    printf "\n"
+    printf "To override, set before running script:\n"
+    printf "SIM_USER=alice SIM_EDITOR=vim ./gitsim.sh home-init\n"
+    printf "Or create a .simrc file: gitsim rcgen\n"
+    return 0
+}
+
 # Generate .profile content
 __print_profile() {
     local file="$1"
@@ -208,7 +321,8 @@ __create_git_structure() {
     
     if mkdir -p "$data_dir"; then
         touch "$data_dir"/{tags.txt,commits.txt,config,index,branches.txt,remotes.txt,HEAD}
-        echo "main" > "$data_dir/branches.txt"
+        echo "main" > "$data_dir/branch.txt"
+        echo "main" >> "$data_dir/branches.txt"
         ret=0
     fi
     
@@ -223,184 +337,6 @@ __add_gitignore_entry() {
     if ! grep -q "^${entry}$" "$gitignore_file" 2>/dev/null; then
         echo "$entry" >> "$gitignore_file"
     fi
-    return 0
-}
-
-__print_package_json() {
-    local file="$1"
-    local project_name="$2"
-
-    cat > "$file" << EOF
-{
-  "name": "$project_name",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
-}
-EOF
-    return $?
-}
-
-__print_cargo_toml() {
-    local file="$1"
-    local project_name="$2"
-
-    cat > "$file" << EOF
-[package]
-name = "$project_name"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-EOF
-    return $?
-}
-
-__print_requirements_txt() {
-    local file="$1"
-
-    cat > "$file" << EOF
-# Add your python dependencies here
-EOF
-    return $?
-}
-
-do_template() {
-    local template_name="$1"
-    local project_name="${2:-testproject}"
-
-    if [ -z "$template_name" ]; then
-        error "template name required"
-        return 1
-    fi
-
-    local sim_root="$PWD"
-    if [ ! -d "$sim_root/.gitsim" ]; then
-        do_init || return 1
-    fi
-
-    case "$template_name" in
-        node)
-            __print_package_json "package.json" "$project_name"
-            okay "Created node project template in $(pwd)"
-            ;;
-        rust)
-            __print_cargo_toml "Cargo.toml" "$project_name"
-            mkdir -p src
-            touch src/main.rs
-            okay "Created rust project template in $(pwd)"
-            ;;
-        python)
-            __print_requirements_txt "requirements.txt"
-            touch main.py
-            okay "Created python project template in $(pwd)"
-            ;;
-        *)
-            error "Unknown template: $template_name"
-            return 1
-            ;;
-    esac
-
-    return 0
-}
-
-do_tag() {
-    local sim_root
-    local tags_file
-
-    sim_root=$(_find_sim_root) || {
-        error "Not in a git repository (or any of the parent directories): .gitsim"
-        return 128
-    }
-
-    tags_file="$sim_root/.gitsim/.data/tags.txt"
-
-    if [[ $# -eq 0 ]]; then
-        # List tags
-        sort "$tags_file"
-        return 0
-    fi
-
-    case "$1" in
-        -d)
-            # Delete tag
-            local tag_to_delete="$2"
-            if [ -z "$tag_to_delete" ]; then
-                error "tag name required"
-                return 1
-            fi
-            if ! grep -q "^$tag_to_delete$" "$tags_file"; then
-                error "tag '$tag_to_delete' not found"
-                return 1
-            fi
-            grep -v "^$tag_to_delete$" "$tags_file" > "$tags_file.tmp" && mv "$tags_file.tmp" "$tags_file"
-            okay "Deleted tag '$tag_to_delete' (was 1234567)"
-            ;;
-        *)
-            # Create tag
-            local new_tag="$1"
-            if grep -q "^$new_tag$" "$tags_file"; then
-                error "tag '$new_tag' already exists"
-                return 1
-            fi
-            echo "$new_tag" >> "$tags_file"
-            okay "Created tag '$new_tag'"
-            ;;
-    esac
-
-    return 0
-}
-
-do_checkout() {
-    local sim_root
-    local branches_file
-
-    sim_root=$(_find_sim_root) || {
-        error "Not in a git repository (or any of the parent directories): .gitsim"
-        return 128
-    }
-
-    branches_file="$sim_root/.gitsim/.data/branches.txt"
-
-    if [[ "$1" == "-b" ]]; then
-        # Create and switch to a new branch
-        local new_branch="$2"
-        if [ -z "$new_branch" ]; then
-            error "branch name required"
-            return 1
-        fi
-        if grep -q "^$new_branch$" "$branches_file"; then
-            error "A branch named '$new_branch' already exists."
-            return 1
-        fi
-        echo "$new_branch" >> "$branches_file"
-        okay "Switched to a new branch '$new_branch'"
-    else
-        # Switch to an existing branch
-        local branch_to_checkout="$1"
-        if [ -z "$branch_to_checkout" ]; then
-            error "branch name required"
-            return 1
-        fi
-        if ! grep -q "^$branch_to_checkout$" "$branches_file"; then
-            error "pathspec '$branch_to_checkout' did not match any file(s) known to git"
-            return 1
-        fi
-
-        # Reorder branches to make the checked out branch the last one
-        grep -v "^$branch_to_checkout$" "$branches_file" > "$branches_file.tmp"
-        echo "$branch_to_checkout" >> "$branches_file.tmp"
-        mv "$branches_file.tmp" "$branches_file"
-
-        okay "Switched to branch '$branch_to_checkout'"
-    fi
-
     return 0
 }
 
@@ -430,46 +366,34 @@ do_init() {
 }
 
 do_init_in_home() {
-
-    local project_name="testproject"
-    local template_name=""
-
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --template=*)
-                template_name="${1#*=}"
-                shift
-                ;;
-            *)
-                project_name="$1"
-                shift
-                ;;
-        esac
-    done
-
-
-    local sim_root="$PWD"
+    local project_name="${1:-testproject}"
+    local sim_root
     local home_dir
     local project_dir
     local ret=1
-
-    # Always work from a .gitsim in the current directory
-    if [ ! -d "$sim_root/.gitsim" ]; then
-        __create_git_structure "$sim_root/.gitsim/.data" || return 1
-    fi
-
+    
+    sim_root=$(_find_sim_root) || {
+        # Create a temporary sim root in current directory
+        if __create_git_structure ".gitsim/.data"; then
+            sim_root="$PWD"
+        else
+            error "Failed to create temporary sim root"
+            return 1
+        fi
+    }
+    
     home_dir=$(_get_sim_home "$sim_root")
-
+    
     # Ensure home is initialized
     if [ ! -d "$home_dir" ]; then
-        do_home_init "$project_name" || return 1
+        do_home_init "$sim_root" "$project_name" || return 1
     fi
-
+    
     project_dir=$(_get_sim_project_dir "$home_dir" "$project_name")
-
+    
     # Create git simulation in the project directory
     local project_data_dir="$project_dir/.gitsim/.data"
-
+    
     if [ -d "$project_data_dir" ]; then
         info "Reinitialized existing Git simulator repository in $project_dir/.gitsim/"
         ret=0
@@ -482,26 +406,24 @@ do_init_in_home() {
             return 1
         fi
     fi
-
+    
     # Create project files
-    if [ -n "$template_name" ]; then
-        (cd "$project_dir" && do_template "$template_name" "$project_name")
-    else
-        printf "# %s\n" "$project_name" > "$project_dir/README.md"
-    fi
+    printf "# %s\n" "$project_name" > "$project_dir/README.md"
     printf "node_modules/\n.gitsim/\n" > "$project_dir/.gitignore"
-
+    
     info "Project path: $project_dir"
     info "To work in this project: cd '$project_dir'"
-
+    
     return "$ret"
 }
 
 do_home_init() {
-    local sim_root="$PWD"
+    local sim_root="${1:-$PWD}"
+    local project_name="${2:-testproject}"
     local home_dir
+    local project_dir
     local ret=1
-
+    
     # Handle case where we don't have a sim_root yet
     if [ ! -d "$sim_root/.gitsim" ]; then
         if __create_git_structure "$sim_root/.gitsim/.data"; then
@@ -511,9 +433,9 @@ do_home_init() {
             return 1
         fi
     fi
-
+    
     home_dir=$(_get_sim_home "$sim_root")
-
+    
     if [ -d "$home_dir" ]; then
         info "Reinitialized simulated home environment at $home_dir"
         ret=0
@@ -526,105 +448,13 @@ do_home_init() {
             return 1
         fi
     fi
-
+    
+    # Create project directory
+    project_dir=$(_get_sim_project_dir "$home_dir" "$project_name")
+    mkdir -p "$project_dir"
+    okay "Created project directory at $project_dir"
+    
     return "$ret"
-
-}
-
-do_clean() {
-    local sim_root
-    local index_file
-    
-    sim_root=$(_find_sim_root) || {
-        error "Not in a git repository (or any of the parent directories): .gitsim"
-        return 128
-    }
-    
-    index_file="$sim_root/.gitsim/.data/index"
-
-    if [ ! -s "$index_file" ]; then
-        info "Nothing to clean, staging area is empty."
-        return 0
-    fi
-
-    # Read files from index and delete them
-    while read -r file; do
-        if [ -f "$sim_root/$file" ]; then
-            rm -f "$sim_root/$file"
-            trace "Removed file: $file"
-        fi
-    done < "$index_file"
-
-    # Clear the index file
-    > "$index_file"
-
-    okay "Cleaned the staging area."
-    return 0
-}
-
-do_branch() {
-    local sim_root
-    local branches_file
-
-    sim_root=$(_find_sim_root) || {
-        error "Not in a git repository (or any of the parent directories): .gitsim"
-        return 128
-    }
-
-    branches_file="$sim_root/.gitsim/.data/branches.txt"
-
-    if [[ $# -eq 0 ]]; then
-        # List branches
-        local current_branch
-        current_branch=$(tail -n 1 "$branches_file")
-        printf "* %s\n" "$current_branch"
-
-        # Print other branches
-        grep -v "^$current_branch$" "$branches_file" | while read -r branch; do
-            printf "  %s\n" "$branch"
-        done
-        return 0
-    fi
-
-    case "$1" in
-        -d)
-            # Delete branch
-            local branch_to_delete="$2"
-            if [ -z "$branch_to_delete" ]; then
-                error "branch name required"
-                return 1
-            fi
-            local current_branch
-            current_branch=$(tail -n 1 "$branches_file")
-            if [[ "$branch_to_delete" == "$current_branch" ]]; then
-                error "Cannot delete branch '$branch_to_delete': checked out"
-                return 1
-            fi
-            if ! grep -q "^$branch_to_delete$" "$branches_file"; then
-                error "branch '$branch_to_delete' not found"
-                return 1
-            fi
-            grep -v "^$branch_to_delete$" "$branches_file" > "$branches_file.tmp" && mv "$branches_file.tmp" "$branches_file"
-            okay "Deleted branch $branch_to_delete."
-            ;;
-        *)
-            # Create branch
-            local new_branch="$1"
-            if grep -q "^$new_branch$" "$branches_file"; then
-                error "A branch named '$new_branch' already exists."
-                return 1
-            fi
-
-            echo "$new_branch" > "$branches_file.tmp"
-            cat "$branches_file" >> "$branches_file.tmp"
-            mv "$branches_file.tmp" "$branches_file"
-
-            okay "Created branch $new_branch."
-            ;;
-    esac
-
-    return 0
-
 }
 
 do_home_env() {
@@ -711,17 +541,207 @@ do_home_ls() {
     return "$ret"
 }
 
-do_home_vars() {
-    printf "Current SIM_ environment variables:\n"
-    printf "SIM_HOME=%s\n" "$SIM_HOME"
-    printf "SIM_USER=%s\n" "$SIM_USER"
-    printf "SIM_SHELL=%s\n" "$SIM_SHELL"
-    printf "SIM_EDITOR=%s\n" "$SIM_EDITOR"  
-    printf "SIM_LANG=%s\n" "$SIM_LANG"
-    printf "\n"
-    printf "To override, set before running script:\n"
-    printf "SIM_USER=alice SIM_EDITOR=vim ./gitsim.sh home-init\n"
+do_cleanup() {
+    local force_cleanup="${1:-false}"
+    local sim_root="$PWD"
+    local simrc_file=".simrc"
+    
+    info "Starting cleanup of GitSim artifacts..."
+    
+    # Clean up .gitsim directory
+    if [[ -d ".gitsim" ]]; then
+        if [[ "$force_cleanup" == "true" ]] || [[ "$opt_yes" == "true" ]]; then
+            rm -rf ".gitsim"
+            okay "Removed .gitsim directory"
+        else
+            warn "Found .gitsim directory"
+            read -p "Remove .gitsim directory? [y/N]: " -r
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                rm -rf ".gitsim"
+                okay "Removed .gitsim directory"
+            fi
+        fi
+    fi
+    
+    # Clean up generated files from .simrc
+    if [[ -f "$simrc_file" ]]; then
+        # Source the .simrc to get GENERATED_FILES array
+        local generated_files=()
+        # Extract GENERATED_FILES array safely
+        if grep -q "GENERATED_FILES=" "$simrc_file"; then
+            # Use eval with proper safety checks
+            local files_line
+            files_line=$(grep "GENERATED_FILES=" "$simrc_file" | head -1)
+            if [[ -n "$files_line" ]]; then
+                eval "$files_line"
+                generated_files=("${GENERATED_FILES[@]}")
+            fi
+        fi
+        
+        if [[ ${#generated_files[@]} -gt 0 ]]; then
+            info "Found ${#generated_files[@]} tracked generated files"
+            for file in "${generated_files[@]}"; do
+                if [[ -f "$file" ]]; then
+                    if [[ "$force_cleanup" == "true" ]] || [[ "$opt_yes" == "true" ]]; then
+                        rm -f "$file"
+                        okay "Removed generated file: $file"
+                    else
+                        read -p "Remove generated file '$file'? [y/N]: " -r
+                        if [[ $REPLY =~ ^[Yy]$ ]]; then
+                            rm -f "$file"
+                            okay "Removed generated file: $file"
+                        fi
+                    fi
+                fi
+            done
+        fi
+        
+        # Clean up .simrc itself
+        if [[ "$force_cleanup" == "true" ]] || [[ "$opt_yes" == "true" ]]; then
+            rm -f "$simrc_file"
+            okay "Removed $simrc_file"
+        else
+            read -p "Remove $simrc_file? [y/N]: " -r
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                rm -f "$simrc_file"
+                okay "Removed $simrc_file"
+            fi
+        fi
+    fi
+    
+    # Clean up .gitignore entries we added
+    if [[ -f ".gitignore" ]] && grep -q "^\.gitsim/$" ".gitignore"; then
+        grep -v "^\.gitsim/$" ".gitignore" > ".gitignore.tmp" && mv ".gitignore.tmp" ".gitignore"
+        okay "Removed .gitsim/ from .gitignore"
+    fi
+    
+do_rcgen() {
+    local simrc_file=".simrc"
+    local force_overwrite=false
+    
+    # Check for force flag
+    if [[ "$1" == "--force" ]]; then
+        force_overwrite=true
+        shift
+    fi
+    
+    # Check if file exists and we're not forcing
+    if [ -f "$simrc_file" ] && [[ "$force_overwrite" == false ]]; then
+        error "File $simrc_file already exists. Use --force to overwrite."
+        return 1
+    fi
+    
+    # Generate the .simrc file
+    __print_simrc "$simrc_file"
+    
+    okay "Created $simrc_file configuration file"
+    info "Edit this file to customize your SIM_ environment variables"
+    info "The file will be automatically sourced when running gitsim commands"
+    
     return 0
+}
+
+# Generate .simrc content
+__print_simrc() {
+    local file="$1"
+    
+    cat > "$file" << EOF
+#!/usr/bin/env bash
+# .simrc - GitSim environment configuration
+# This file is automatically sourced by gitsim commands
+
+# SIM_ variables that can be overridden for testing
+# These inherit from your shell environment but can be customized here
+
+# Base simulated home (inherits from XDG_HOME or HOME)
+SIM_HOME=\${XDG_HOME:-\$HOME}
+
+# Simulated user identity
+SIM_USER=\${USER:-testuser}
+
+# Simulated shell environment  
+SIM_SHELL=\${SHELL:-/bin/bash}
+
+# Simulated default editor
+SIM_EDITOR=\${EDITOR:-nano}
+
+# Simulated locale
+SIM_LANG=\${LANG:-en_US.UTF-8}
+
+# Generated files tracking (for cleanup)
+GENERATED_FILES=()
+
+# Example custom overrides:
+# SIM_USER="alice"
+# SIM_EDITOR="vim"
+# SIM_HOME="/tmp/custom-sim-home"
+
+# Export variables so they're available to subshells
+export SIM_HOME SIM_USER SIM_SHELL SIM_EDITOR SIM_LANG
+EOF
+    
+    return $?
+}
+    
+    # Check for force flag
+    if [[ "$1" == "--force" ]]; then
+        force_overwrite=true
+        shift
+    fi
+    
+    # Check if file exists and we're not forcing
+    if [ -f "$simrc_file" ] && [[ "$force_overwrite" == false ]]; then
+        error "File $simrc_file already exists. Use --force to overwrite."
+        return 1
+    fi
+    
+    # Generate the .simrc file
+    __print_simrc "$simrc_file"
+    
+    okay "Created $simrc_file configuration file"
+    info "Edit this file to customize your SIM_ environment variables"
+    info "The file will be automatically sourced when running gitsim commands"
+    
+    return 0
+}
+
+# Generate .simrc content
+__print_simrc() {
+    local file="$1"
+    
+    cat > "$file" << EOF
+#!/usr/bin/env bash
+# .simrc - GitSim environment configuration
+# This file is automatically sourced by gitsim commands
+
+# SIM_ variables that can be overridden for testing
+# These inherit from your shell environment but can be customized here
+
+# Base simulated home (inherits from XDG_HOME or HOME)
+SIM_HOME=\${XDG_HOME:-\$HOME}
+
+# Simulated user identity
+SIM_USER=\${USER:-testuser}
+
+# Simulated shell environment  
+SIM_SHELL=\${SHELL:-/bin/bash}
+
+# Simulated default editor
+SIM_EDITOR=\${EDITOR:-nano}
+
+# Simulated locale
+SIM_LANG=\${LANG:-en_US.UTF-8}
+
+# Example custom overrides:
+# SIM_USER="alice"
+# SIM_EDITOR="vim"
+# SIM_HOME="/tmp/custom-sim-home"
+
+# Export variables so they're available to subshells
+export SIM_HOME SIM_USER SIM_SHELL SIM_EDITOR SIM_LANG
+EOF
+    
+    return $?
 }
 
 do_version() {
@@ -766,27 +786,30 @@ do_install() {
 }
 
 do_uninstall() {
+    local ret=1
+    
     if [[ "$opt_force" == false ]]; then
         error "Uninstall requires --force flag for safety"
         info "Use: $GITSIM_NAME uninstall --force"
         return 1
     fi
-
+    
     info "Uninstalling $GITSIM_NAME..."
-
-    # Create a temporary script to do the uninstallation
-    local temp_script
-    temp_script=$(mktemp)
-    cat > "$temp_script" <<EOF
-#!/usr/bin/env bash
-rm -f "$GITSIM_BIN_LINK"
-rm -rf "$GITSIM_LIB_DIR"
-echo "[OK] Uninstalled $GITSIM_NAME successfully"
-EOF
-    chmod +x "$temp_script"
-
-    # Execute the temporary script and exit
-    exec "$temp_script"
+    
+    # Remove symlink
+    if [ -L "$GITSIM_BIN_LINK" ]; then
+        rm -f "$GITSIM_BIN_LINK"
+        trace "Removed symlink $GITSIM_BIN_LINK"
+    fi
+    
+    # Remove lib directory
+    if [ -d "$GITSIM_LIB_DIR" ]; then
+        rm -rf "$GITSIM_LIB_DIR"
+        trace "Removed lib directory $GITSIM_LIB_DIR"
+    fi
+    
+    okay "Uninstalled $GITSIM_NAME successfully"
+    return 0
 }
 
 # Git command implementations would go here - abbreviated for space
@@ -866,7 +889,7 @@ do_commit() {
 do_status() {
     local sim_root
     local index_file
-    local branches_file
+    local branch_file
     local ret=1
     
     sim_root=$(_find_sim_root) || {
@@ -875,7 +898,7 @@ do_status() {
     }
     
     index_file="$sim_root/.gitsim/.data/index"
-    branches_file="$sim_root/.gitsim/.data/branches.txt"
+    branch_file="$sim_root/.gitsim/.data/branch.txt"
     
     if [[ "$1" == "--porcelain" ]]; then
         if [ -s "$index_file" ]; then
@@ -886,7 +909,7 @@ do_status() {
     
     # Human-readable output
     local branch
-    branch=$(tail -n 1 "$branches_file" 2>/dev/null)
+    branch=$(cat "$branch_file" 2>/dev/null)
     printf "On branch %s\n" "${branch:-main}"
     
     if [ -s "$index_file" ]; then
@@ -903,24 +926,9 @@ do_status() {
 
 # Test data generation functions
 do_noise() {
-    local num_files=1
-    local file_type=""
-
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --type=*)
-                file_type="${1#*=}"
-                shift
-                ;;
-            *)
-                num_files="$1"
-                shift
-                ;;
-        esac
-    done
-
     local sim_root
     local data_dir
+    local num_files="${1:-1}"
     local ret=1
     
     sim_root=$(_find_sim_root) || {
@@ -934,29 +942,11 @@ do_noise() {
     local exts=(".md" ".fake" ".log" ".sh" ".txt" ".tmp" ".json" ".yml" ".xml" ".conf")
 
     for i in $(seq 1 "$num_files"); do
-        local filename
-        local content
-        case "$file_type" in
-            js)
-                filename="script_${i}.js"
-                content="console.log('hello world');"
-                ;;
-            py)
-                filename="script_${i}.py"
-                content="print('hello world')"
-                ;;
-            rs)
-                filename="script_${i}.rs"
-                content="fn main() { println!(\"hello world\"); }"
-                ;;
-            *)
-                local rand_name=${names[$RANDOM % ${#names[@]}]}
-                local rand_ext=${exts[$RANDOM % ${#exts[@]}]}
-                filename="${rand_name}_${i}${rand_ext}"
-                content=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
-                ;;
-        esac
-        echo "$content" > "$sim_root/$filename"
+        local rand_name=${names[$RANDOM % ${#names[@]}]}
+        local rand_ext=${exts[$RANDOM % ${#exts[@]}]}
+        local filename="${rand_name}_${i}${rand_ext}"
+
+        head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32 > "$sim_root/$filename"
         echo "$filename" >> "$data_dir/index"
     done
 
@@ -965,8 +955,53 @@ do_noise() {
     return 0
 }
 
-do_usage() {
-    usage
+################################################################################
+# Development Functions
+################################################################################
+
+dev_test_all() {
+    local test_dir
+    local ret=1
+    
+    info "Running comprehensive development tests..."
+    
+    # Create temporary test environment in cache
+    test_dir=$(_mktemp_dir)
+    trace "Created test directory: $test_dir"
+    
+    # Store original directory
+    local original_dir="$PWD"
+    
+    # Test basic init
+    if (cd "$test_dir" && "$original_dir/$0" init); then
+        okay "Basic init test passed"
+    else
+        error "Basic init test failed"
+        return 1
+    fi
+    
+    # Test home init
+    if (cd "$test_dir" && "$original_dir/$0" home-init); then
+        okay "Home init test passed"
+    else
+        error "Home init test failed"
+        return 1
+    fi
+    
+    # Test init-in-home
+    if (cd "$test_dir" && "$original_dir/$0" init-in-home testproject); then
+        okay "Init-in-home test passed"
+    else
+        error "Init-in-home test failed"
+        return 1
+    fi
+    
+    # Cleanup
+    rm -rf "$test_dir"
+    trace "Cleaned up test directory"
+    
+    okay "All development tests passed"
+    return 0
 }
 
 ################################################################################
@@ -984,14 +1019,6 @@ dispatch() {
         add)            do_add "$@";;
         commit)         do_commit "$@";;
         status)         do_status "$@";;
-        clean)          do_clean "$@";;
-
-        branch)         do_branch "$@";;
-        checkout)       do_checkout "$@";;
-        tag)            do_tag "$@";;
-        reset)          do_clean "$@";;
-        template)       do_template "$@";;
-
         
         # Home environment
         home-init)      do_home_init "$@";;
@@ -1003,11 +1030,17 @@ dispatch() {
         # Test data generation
         noise)          do_noise "$@";;
         
+        # Configuration
+        rcgen)          do_rcgen "$@";;
+        cleanup)        do_cleanup "$@";;
+        
         # System management
         install)        do_install "$@";;
         uninstall)      do_uninstall "$@";;
         version)        do_version "$@";;
-        help)           do_usage "$@";;
+        
+        # Development
+        dev-test)       dev_test_all "$@";;
         
         *)
             error "Unknown command: $cmd"
@@ -1030,13 +1063,6 @@ CORE COMMANDS:
     add <files>             Add files to staging area
     commit -m "message"     Create a commit with message
     status                  Show repository status
-    clean                   Remove all files from the staging area
-    branch                  List, create, or delete branches
-    checkout                Switch branches or create a new branch
-    tag                     Create, list, or delete a tag
-    reset                   Unstage all files
-    template                Create a project from a template
-
 
 HOME ENVIRONMENT:
     home-init [project]     Initialize simulated home environment
@@ -1052,7 +1078,6 @@ SYSTEM:
     install                Install to XDG+ directories
     uninstall --force      Remove installation
     version                Show version information
-    help                   Show this help message
 
 OPTIONS:
     -d, --debug            Enable debug output
@@ -1081,88 +1106,79 @@ EOF
 }
 
 options() {
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
+    local this next opts=("$@")
+    for ((i=0; i<${#opts[@]}; i++)); do
+        this=${opts[i]}
+        next=${opts[i+1]}
+        case "$this" in
             -d|--debug)
                 opt_debug=true
-                shift
                 ;;
             -t|--trace)
                 opt_trace=true
                 opt_debug=true
-                shift
                 ;;
             -q|--quiet)
                 opt_quiet=true
-                shift
                 ;;
             -f|--force)
                 opt_force=true
-                shift
                 ;;
             -y|--yes)
                 opt_yes=true
-                shift
                 ;;
             -D|--dev)
                 opt_dev=true
                 opt_debug=true
                 opt_trace=true
-                shift
                 ;;
             -h|--help)
                 usage
                 exit 0
                 ;;
-            --)
-                shift
-                break
-                ;;
-            -*)
-                error "Unknown option: $1"
-                usage
-                exit 1
-                ;;
             *)
-                break
+                :
                 ;;
         esac
     done
 }
 
 main() {
-    # Parse options first
-    options "$@"
+    # Show logo
+    _logo
     
-    # Remove parsed options from arguments
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -d|--debug|-t|--trace|-q|--quiet|-f|--force|-y|--yes|-D|--dev|-h|--help)
-                shift
-                ;;
-            --)
-                shift
-                break
-                ;;
-            -*)
-                shift
-                ;;
-            *)
-                break
-                ;;
-        esac
+    # Try to source .simrc for environment customization
+    _source_simrc
+    
+    # Parse options and remove them from args
+    local orig_args=("$@")
+    options "${orig_args[@]}"
+    
+    # Remove options from arguments (keep only non-option args)  
+    local args=()
+    for arg in "${orig_args[@]}"; do
+        if [[ "$arg" =~ ^-.*$ ]]; then
+            continue  # Skip options
+        fi
+        args+=("$arg")
     done
     
     # Show help if no command provided
-    if [[ $# -eq 0 ]]; then
+    if [[ ${#args[@]} -eq 0 ]]; then
         usage
         exit 0
     fi
     
+    # For home/project commands, suggest .simrc if not found
+    case "${args[0]}" in
+        home-init|init-in-home|home-vars)
+            _check_simrc || true  # Don't fail on missing .simrc
+            ;;
+    esac
+    
     # Dispatch to command
-    dispatch "$@"
+    dispatch "${args[@]}"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+# Script execution
+main "$@"
