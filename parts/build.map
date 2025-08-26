@@ -1,0 +1,23 @@
+# Build Map for GitSim
+# Format: NN : target_filename.sh
+# Lines starting with # are ignored
+# Place this file in: parts/build.map
+
+01 : part_01_header.sh
+02 : part_02_config.sh  
+03 : part_03_stderr.sh
+04 : part_04_helpers.sh
+05 : part_05_git_simulation.sh
+06 : part_06_rc_system.sh
+13 : part_13_template_system.sh
+14 : part_14_templates_rust.sh
+15 : part_15_templates_bash.sh
+16 : part_16_templates_node.sh
+17 : part_17_templates_python.sh
+69 : part_69_dispatcher.sh
+70 : part_70_dispatchable_core.sh
+71 : part_71_dispatchable_home.sh
+72 : part_72_dispatchable_system.sh
+80 : part_80_dispatchable_utils.sh
+90 : part_90_dispatcher.sh
+99 : part_99_main.sh

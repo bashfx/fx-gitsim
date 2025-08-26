@@ -1,2 +1,37 @@
+# Build artifacts
+*.tmp
+*.log
+*.bak
+
+# Test artifacts  
+test-*
+temp-*
+*-test/
+
+# Cache and temporary files
+.cache/
+/tmp/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# GitSim artifacts (when testing)
 .gitsim/
-.claude
+.simrc
+
+# Build system temporary files
+parts-upd/
+parts-bak/
