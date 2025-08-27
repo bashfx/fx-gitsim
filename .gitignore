@@ -29,7 +29,6 @@ ehthumbs.db
 Thumbs.db
 
 # GitSim artifacts (when testing)
-.gitsim/
 .simrc
 
 # Build system temporary files
