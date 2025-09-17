@@ -2,8 +2,16 @@
 # Dispatchable Functions (System Management)
 ################################################################################
 
+_get_version() {
+    # Extract version from semv metadata
+    local version
+    version=$(grep "^# semv-version:" "$0" | cut -d' ' -f3)
+    [[ -z "$version" ]] && version="unknown"
+    echo "$version"
+}
+
 do_version() {
-    printf "%s v%s\n" "$GITSIM_NAME" "$GITSIM_VERSION"
+    printf "%s v%s\n" "$GITSIM_NAME" "$(_get_version)"
     return 0
 }
 

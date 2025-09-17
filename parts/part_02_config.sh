@@ -2,7 +2,6 @@
 # Configuration & XDG+ Compliance
 ################################################################################
 
-readonly GITSIM_VERSION="2.1.0"
 readonly GITSIM_NAME="gitsim"
 
 # XDG+ Base Configuration

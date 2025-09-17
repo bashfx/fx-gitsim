@@ -6,8 +6,11 @@
 # This part only contains the usage() function to avoid duplication
 
 usage() {
-    cat << 'EOF'
-gitsim - Git & Home Environment Simulator v2.1.0
+    local version
+    version=$(_get_version)
+
+    cat << EOF
+gitsim - Git & Home Environment Simulator v$version
 
 USAGE:
     gitsim <command> [options] [args]
