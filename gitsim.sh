@@ -10,7 +10,7 @@
 # └─┘┴ ┴ └─┘┴┴ ┴
 #
 # name: gitsim
-# semv-version: 2.1.0
+# semv-version: 2.1.1
 # desc: Git & Home Environment Simulator for Testing
 #
 # portable: find, mkdir, sed, awk, grep, shasum, wc, sort, tac, dirname, basename, mktemp
