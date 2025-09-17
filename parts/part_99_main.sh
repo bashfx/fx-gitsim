@@ -47,8 +47,8 @@ else
         fi
         
         case "$arg" in
-            # Global options that should be filtered  
-            -d|--debug|-t|--trace|-q|--quiet|-f|-y|--yes|-D|--dev|-h|--help)
+            # Global options that should be filtered
+            -d|--debug|-t|--trace|-q|--quiet|-f|-y|--yes|-D|--dev|-h|--help|-v|--version)
                 ;;
             # Command-specific flags that should be preserved
             -m|--allow-empty|--template=*|--porcelain|--force|--testsh)

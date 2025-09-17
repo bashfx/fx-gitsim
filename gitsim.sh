@@ -5872,7 +5872,8 @@ dispatch() {
         install)        do_install "$@";;
         uninstall)      do_uninstall "$@";;
         version)        do_version "$@";;
-        
+        help)           usage;;
+
         *)
             error "Unknown command: $cmd"
             usage
@@ -6574,7 +6575,7 @@ do_cleanup() {
 
 usage() {
     cat << 'EOF'
-gitsim - Git & Home Environment Simulator v2.0.0
+gitsim - Git & Home Environment Simulator v2.1.0
 
 USAGE:
     gitsim <command> [options] [args]
@@ -6609,6 +6610,7 @@ SYSTEM:
     install                Install to XDG+ directories
     uninstall --force      Remove installation
     version                Show version information
+    help                   Show this help message
 
 OPTIONS:
     -d, --debug            Enable debug output
@@ -6616,6 +6618,8 @@ OPTIONS:
     -q, --quiet            Suppress all output except errors
     -f, --force            Force operations, bypass safety checks
     -D, --dev              Enable developer mode
+    -h, --help             Show this help message
+    -v, --version          Show version information
 
 ENVIRONMENT VARIABLES:
     SIM_HOME               Base simulated home [$SIM_HOME]
@@ -6667,6 +6671,10 @@ options() {
                 ;;
             -h|--help)
                 usage
+                exit 0
+                ;;
+            -v|--version)
+                do_version
                 exit 0
                 ;;
             *)
@@ -6729,8 +6737,8 @@ else
         fi
         
         case "$arg" in
-            # Global options that should be filtered  
-            -d|--debug|-t|--trace|-q|--quiet|-f|-y|--yes|-D|--dev|-h|--help)
+            # Global options that should be filtered
+            -d|--debug|-t|--trace|-q|--quiet|-f|-y|--yes|-D|--dev|-h|--help|-v|--version)
                 ;;
             # Command-specific flags that should be preserved
             -m|--allow-empty|--template=*|--porcelain|--force|--testsh)

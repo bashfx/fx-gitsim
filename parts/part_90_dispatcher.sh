@@ -7,7 +7,7 @@
 
 usage() {
     cat << 'EOF'
-gitsim - Git & Home Environment Simulator v2.0.0
+gitsim - Git & Home Environment Simulator v2.1.0
 
 USAGE:
     gitsim <command> [options] [args]
@@ -42,6 +42,7 @@ SYSTEM:
     install                Install to XDG+ directories
     uninstall --force      Remove installation
     version                Show version information
+    help                   Show this help message
 
 OPTIONS:
     -d, --debug            Enable debug output
@@ -49,6 +50,8 @@ OPTIONS:
     -q, --quiet            Suppress all output except errors
     -f, --force            Force operations, bypass safety checks
     -D, --dev              Enable developer mode
+    -h, --help             Show this help message
+    -v, --version          Show version information
 
 ENVIRONMENT VARIABLES:
     SIM_HOME               Base simulated home [$SIM_HOME]
@@ -100,6 +103,10 @@ options() {
                 ;;
             -h|--help)
                 usage
+                exit 0
+                ;;
+            -v|--version)
+                do_version
                 exit 0
                 ;;
             *)

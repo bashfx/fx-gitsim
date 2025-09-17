@@ -85,7 +85,8 @@ dispatch() {
         install)        do_install "$@";;
         uninstall)      do_uninstall "$@";;
         version)        do_version "$@";;
-        
+        help)           usage;;
+
         *)
             error "Unknown command: $cmd"
             usage
