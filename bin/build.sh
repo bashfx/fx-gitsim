@@ -4,9 +4,11 @@
 # BashFX Build Pattern v1
 #
 
-# Configuration
-OUTPUT_FILE="gitsim.sh"
-PARTS_DIR="parts"
+# Configuration - paths relative to script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+OUTPUT_FILE="$PROJECT_ROOT/gitsim.sh"
+PARTS_DIR="$PROJECT_ROOT/parts"
 BUILD_MAP="$PARTS_DIR/build.map"
 BACKUP_SUFFIX=".bak"
 

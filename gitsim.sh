@@ -26,7 +26,7 @@
 # Configuration & XDG+ Compliance
 ################################################################################
 
-readonly GITSIM_NAME="gitsim"
+GITSIM_NAME="gitsim"
 
 # XDG+ Base Configuration
 : ${XDG_HOME:="$HOME/.local"}
@@ -40,9 +40,9 @@ readonly GITSIM_NAME="gitsim"
 : ${TMPDIR:="$XDG_CACHE_HOME/tmp"}
 
 # BashFX FX-specific paths
-readonly GITSIM_LIB_DIR="$XDG_LIB_HOME/fx/$GITSIM_NAME"
-readonly GITSIM_BIN_LINK="$XDG_BIN_HOME/fx/$GITSIM_NAME"
-readonly GITSIM_ETC_DIR="$XDG_ETC_HOME/$GITSIM_NAME"
+GITSIM_LIB_DIR="$XDG_LIB_HOME/fx/$GITSIM_NAME"
+GITSIM_BIN_LINK="$XDG_BIN_HOME/fx/$GITSIM_NAME"
+GITSIM_ETC_DIR="$XDG_ETC_HOME/$GITSIM_NAME"
 
 # SIM_ variables that can inherit from live shell or be overridden
 : ${SIM_HOME:=${XDG_HOME:-$HOME}}

@@ -541,9 +541,9 @@ run_install_tests() {
     # shellcheck disable=SC2064
     trap "echo '--> Cleaning up install test directories...'; rm -rf '$temp_xdg_home'" EXIT
 
-    # 1. Test install with overridden XDG_HOME
+    # 1. Test install with overridden XDG variables
     echo "--> Testing 'gitsim install' with custom XDG_HOME..."
-    XDG_HOME="$temp_xdg_home" ./gitsim.sh install > /dev/null
+    XDG_HOME="$temp_xdg_home" XDG_LIB_HOME="$temp_xdg_home/lib" XDG_BIN_HOME="$temp_xdg_home/bin" ./gitsim.sh install > /dev/null
     if [ ! -f "$install_dir/gitsim.sh" ] || [ ! -L "$link_path" ]; then
         echo "ERROR: 'install' did not create script and symlink"
         echo "  Expected script: $install_dir/gitsim.sh"
@@ -558,7 +558,7 @@ run_install_tests() {
 
     # 2. Test uninstall (should fail without --force)
     echo "--> Testing 'uninstall' without --force (should fail)..."
-    if XDG_HOME="$temp_xdg_home" ./gitsim.sh uninstall > /dev/null 2>&1; then
+    if XDG_HOME="$temp_xdg_home" XDG_LIB_HOME="$temp_xdg_home/lib" XDG_BIN_HOME="$temp_xdg_home/bin" ./gitsim.sh uninstall > /dev/null 2>&1; then
         echo "ERROR: 'uninstall' succeeded when it should have failed (safety check)."
         exit 1
     fi
@@ -566,7 +566,7 @@ run_install_tests() {
 
     # 3. Test forced uninstall
     echo "--> Testing 'uninstall --force'..."
-    XDG_HOME="$temp_xdg_home" ./gitsim.sh uninstall --force > /dev/null
+    XDG_HOME="$temp_xdg_home" XDG_LIB_HOME="$temp_xdg_home/lib" XDG_BIN_HOME="$temp_xdg_home/bin" ./gitsim.sh uninstall --force > /dev/null
     if [ -L "$link_path" ] || [ -d "$install_dir" ]; then
         echo "ERROR: Forced 'uninstall' did not remove script files"
         exit 1
