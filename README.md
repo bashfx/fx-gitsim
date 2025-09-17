@@ -1,16 +1,22 @@
 # GitSim - Git & Home Environment Simulator
 
-![version](https://img.shields.io/badge/version-2.0.0-blue)
+![version](https://img.shields.io/badge/version-2.1.2-blue)
 ![architecture](https://img.shields.io/badge/architecture-BashFX_2.1-green)
 ![dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)
+![testing](https://img.shields.io/badge/testing-TESTSH_compliant-purple)
 
 A BashFX 2.1 compliant tool for creating realistic git repositories and home environments for testing, demonstrations, and development workflows. GitSim provides safe, isolated environments that simulate real development scenarios without polluting your actual workspace.
+
+**NEW in v2.1.2**: Professional-grade **TESTSH testing framework** with comprehensive test categories, multi-language support, and automated bootstrap capabilities for serious development workflows.
 
 ## 🎯 Key Features
 
 - **🔄 Git Simulation**: Full git operations (init, add, commit, status) with realistic repository structure
 - **🏠 Home Environment**: Complete XDG-compliant simulated home directories with dotfiles
-- **📋 Project Templates**: Professional scaffolding for Rust, Node.js, Python, and BashFX projects
+- **📋 Project Templates**: Professional scaffolding for Rust, Node.js, Python, BashFX, and **TESTSH** projects
+- **🧪 TESTSH Testing Framework**: Comprehensive test suites with 8 categories (unit, sanity, smoke, integration, e2e, uat, chaos, bench)
+- **🔧 Multi-Language Support**: Template generation for Rust, JavaScript, Python, Bash with automatic language detection
+- **⚡ Bootstrap Capabilities**: Automated test structure generation with executable examples
 - **🛡️ Safe Operations**: Zero risk to your real repositories and home directory
 - **🧹 Rewindable**: Complete cleanup and uninstall capabilities
 - **📦 Zero Dependencies**: Pure bash with only POSIX utilities
@@ -18,6 +24,7 @@ A BashFX 2.1 compliant tool for creating realistic git repositories and home env
 
 ## 🚀 Quick Start
 
+### Basic Usage
 ```bash
 # Clone and test immediately
 git clone <repository>
@@ -31,10 +38,36 @@ echo "Hello World" > hello.txt
 ./gitsim.sh add hello.txt
 ./gitsim.sh commit -m "Add hello world"
 ./gitsim.sh status
+```
 
-# Create project with template
+### Professional Test Suite Creation (NEW!)
+```bash
+# Create comprehensive TESTSH test suite
+./gitsim.sh template testsh myproject
+cd myproject
+
+# Run the complete test suite
+./test.sh run
+
+# Bootstrap additional test structure for Rust
+./test.sh bootstrap rust
+
+# Run specific test categories
+./test.sh run sanity
+./test.sh run e2e
+./test.sh list  # See all available tests
+```
+
+### Enhanced Project Templates
+```bash
+# Create BashFX project with integrated TESTSH
+./gitsim.sh template bash myproject --testsh
+cd myproject && ./test.sh run
+
+# Standard project templates
 ./gitsim.sh template rust myproject
-cd myproject && ls -la
+./gitsim.sh template node frontend
+./gitsim.sh template python ml-service
 
 # Set up simulated home environment
 ./gitsim.sh home-init
@@ -52,28 +85,38 @@ chmod +x gitsim.sh
 ./gitsim.sh init
 ```
 
-### Option 2: System Installation
+### Option 2: System Installation (Enhanced in v2.1.2)
 ```bash
 # Install to XDG+ directories (~/.local)
-./gitsim.sh install
+./gitsim.sh install  # Now handles upgrades automatically
 
 # Add to PATH
 export PATH="$HOME/.local/bin/fx:$PATH"
 
-# Verify installation
+# Verify installation with dynamic version
 gitsim version
+gitsim -v        # Short form
+gitsim --version # Long form
+
+# Get help
+gitsim help
+gitsim -h
+gitsim --help
 
 # Generate configuration (optional)
 gitsim rcgen
 ```
 
-### Option 3: Development Setup
+### Option 3: Development Setup (Improved Build System)
 ```bash
 # For developers working on GitSim itself
 git clone <repository>
 cd fx-gitsim
-./build.sh build    # Build from parts
-./test_runner.sh    # Run test suite
+
+# Build system now includes bin/ directory
+./build.sh build     # Build from parts using new architecture
+./bin/test.sh         # Enhanced test runner with TESTSH
+./bin/build.sh        # Modular build scripts
 ```
 
 ## 📖 Complete API Reference
@@ -244,10 +287,162 @@ Preview template contents and structure.
 
 | Template | Aliases | Description | Generated Structure |
 |----------|---------|-------------|--------------------|
+| **testsh** | test-suite, testing | **NEW!** TESTSH-compliant comprehensive test suite | test.sh, tests/{8 categories}, scripts/bootstrap-tests.sh |
 | **rust** | rs | Cargo project with modern Rust setup | Cargo.toml, src/main.rs, src/lib.rs, tests/, .gitignore |
 | **bash** | sh, bashfx | BashFX-compliant script with build system | script.sh, parts/, build.map, test_runner.sh |
 | **node** | js, npm, javascript | Node.js project with modern tooling | package.json, src/index.js, test/, .gitignore |
 | **python** | py | Modern Python with pyproject.toml | pyproject.toml, src/project/, tests/, .gitignore |
+
+#### Enhanced Template Options (v2.1.2)
+
+**TESTSH Integration**: The bash template now supports the `--testsh` flag for comprehensive testing:
+```bash
+./gitsim.sh template bash myproject --testsh  # BashFX + TESTSH integration
+```
+
+**Test Categories**: TESTSH template includes 8 organized test categories:
+- **sanity** - Basic functionality validation
+- **smoke** - Quick health checks
+- **unit** - Component isolation testing
+- **integration** - Component interaction testing
+- **e2e** - End-to-end workflow testing
+- **uat** - User acceptance testing
+- **chaos** - Resilience and failure testing
+- **bench** - Performance benchmarking
+- **_adhoc** - One-off testing scenarios
+
+### TESTSH Template System (NEW in v2.1.2)
+
+The TESTSH template system provides professional-grade testing infrastructure for any language or project type.
+
+#### `template testsh [project]`
+Create a standalone comprehensive test suite.
+
+**Arguments:**
+- `project` - Target directory name (optional, uses current directory if omitted)
+
+**Generated Structure:**
+```
+myproject/
+├── test.sh                    # Main TESTSH-compliant test runner
+├── scripts/
+│   └── bootstrap-tests.sh     # Multi-language test generator
+├── tests/
+│   ├── {category}.sh          # Category wrapper scripts
+│   ├── sanity/basic.sh        # Example sanity test
+│   ├── smoke/quick.sh         # Example smoke test
+│   ├── unit/                  # Unit test modules
+│   ├── integration/           # Integration tests
+│   ├── e2e/                   # End-to-end tests
+│   ├── uat/                   # User acceptance tests
+│   ├── chaos/                 # Chaos engineering tests
+│   ├── bench/                 # Benchmark tests
+│   └── _adhoc/demo.sh         # Adhoc test example
+├── README.md                  # Test documentation
+└── .gitignore                 # Test-specific ignore patterns
+```
+
+**Examples:**
+```bash
+./gitsim.sh template testsh              # In current directory
+./gitsim.sh template testsh myproject    # Create ./myproject/
+./gitsim.sh template test-suite api      # Using alias
+```
+
+#### TESTSH Template Usage
+
+**Running Tests:**
+```bash
+cd myproject
+
+# List all available test categories and counts
+./test.sh list
+
+# Run all test categories in sequence
+./test.sh run
+
+# Run specific category
+./test.sh run sanity
+./test.sh run e2e
+./test.sh run adhoc
+```
+
+**Bootstrapping Language-Specific Tests:**
+```bash
+# Auto-detect project language and generate tests
+./test.sh bootstrap
+
+# Generate tests for specific language
+./test.sh bootstrap rust     # Creates .rs test files
+./test.sh bootstrap node     # Creates .js test files
+./test.sh bootstrap python   # Creates .py test files
+./test.sh bootstrap bash     # Creates .sh test files
+```
+
+**Multi-Language Support:**
+The bootstrap system automatically detects project type:
+- **Rust**: Looks for `Cargo.toml` → generates `.rs` test files
+- **Node.js**: Looks for `package.json` → generates `.js` test files
+- **Python**: Looks for `.py`, `setup.py`, `requirements.txt` → generates `.py` test files
+- **Bash**: Looks for `.sh`, `build.sh` → generates `.sh` test files
+- **Generic**: Falls back to `.txt` placeholder files
+
+**Test File Examples Generated:**
+```rust
+// tests/sanity/example.rs (Rust)
+#[test]
+fn sanity_example() {
+    assert!(true);
+}
+```
+
+```javascript
+// tests/uat/example.js (Node.js)
+describe('UAT Tests', () => {
+    it('should pass basic UAT check', () => {
+        expect(true).toBe(true);
+    });
+});
+```
+
+```python
+# tests/unit/example.py (Python)
+import unittest
+
+class UnitTests(unittest.TestCase):
+    def test_unit_example(self):
+        self.assertTrue(True)
+```
+
+#### Enhanced Bash Template with TESTSH
+
+**Template with TESTSH Integration:**
+```bash
+./gitsim.sh template bash myproject --testsh
+```
+
+This creates a BashFX project with full TESTSH integration:
+- Standard BashFX build system (`parts/`, `build.sh`)
+- TESTSH test runner (`test.sh` instead of `test_runner.sh`)
+- Full test category structure
+- Bootstrap script for generating tests
+- Integrated build and test workflow
+
+**Workflow Example:**
+```bash
+./gitsim.sh template bash calculator --testsh
+cd calculator
+
+# Build the project
+./build.sh build
+
+# Run all tests
+./test.sh run
+
+# Add custom tests
+./test.sh bootstrap bash
+./test.sh run unit
+```
 
 ### Test Data Generation
 
@@ -317,13 +512,23 @@ Remove GitSim installation completely.
 ./gitsim.sh uninstall --force
 ```
 
-#### `version`
-Show version information.
+#### `version` / `help` (Enhanced in v2.1.2)
+Show version information or comprehensive help.
 
-**Examples:**
+**Version Command:**
 ```bash
-./gitsim.sh version
-# Output: gitsim v2.0.0
+./gitsim.sh version         # Full version info
+./gitsim.sh -v              # Short form
+./gitsim.sh --version       # Long form
+# Output: gitsim v2.1.2
+```
+
+**Help Command:**
+```bash
+./gitsim.sh help            # Show comprehensive command help
+./gitsim.sh -h              # Short form
+./gitsim.sh --help          # Long form
+./gitsim.sh template --help # Command-specific help
 ```
 
 ## 🔧 Global Options
@@ -366,6 +571,59 @@ GitSim respects and can override these environment variables:
 - `XDG_ETC_HOME` - Configuration files (default: `$XDG_HOME/etc`)
 
 ## 📝 Usage Examples
+
+### Professional Test Suite Development (NEW!)
+
+#### Creating Comprehensive Test Infrastructure
+```bash
+# Create a standalone test suite for existing project
+./gitsim.sh template testsh
+./test.sh list                    # See available test categories
+
+# Bootstrap tests for your language
+./test.sh bootstrap rust          # Generate Rust test files
+./test.sh run sanity             # Run sanity checks
+./test.sh run                    # Run all test categories
+```
+
+#### Multi-Language Testing Workflows
+```bash
+# Python project with comprehensive testing
+./gitsim.sh template testsh ml-pipeline
+cd ml-pipeline
+./test.sh bootstrap python
+
+# Run progressive test suite
+./test.sh run sanity             # Quick validation
+./test.sh run unit               # Component tests
+./test.sh run integration        # Integration tests
+./test.sh run e2e               # End-to-end tests
+./test.sh clean                 # Clean test artifacts
+```
+
+#### BashFX + TESTSH Integration
+```bash
+# Create professional bash project with testing
+./gitsim.sh template bash deploy-tools --testsh
+cd deploy-tools
+
+# Development workflow
+./build.sh build               # Build from parts/
+./test.sh run sanity           # Quick health check
+./test.sh bootstrap bash       # Generate bash tests
+./test.sh run                  # Full test suite
+```
+
+#### Advanced Testing Scenarios
+```bash
+# Chaos engineering and benchmark testing
+./gitsim.sh template testsh performance-suite
+cd performance-suite
+
+./test.sh run chaos           # Chaos engineering tests
+./test.sh run bench           # Performance benchmarks
+./test.sh run uat            # User acceptance tests
+```
 
 ### Testing Deployment Scripts
 ```bash
@@ -425,48 +683,66 @@ ls ml-service/src/  # Python package structure
 
 ## 🏗️ Development & Architecture
 
-GitSim is built using the BashFX 2.1 architecture for maintainability and scalability.
+GitSim is built using the BashFX 2.1 architecture for maintainability and scalability, now enhanced with professional testing infrastructure.
 
-### Build System
+### Enhanced Build System (v2.1.2)
 ```bash
 # Build from modular parts
 ./build.sh build    # Concatenate parts into gitsim.sh
 ./build.sh clean    # Remove build artifacts
 
-# Development workflow
-./test_runner.sh    # Run full test suite
-./build.sh build && ./test_runner.sh  # Test after build
+# Enhanced development workflow with TESTSH
+./bin/test.sh run    # Run TESTSH-compliant test suite
+./bin/build.sh       # Modular build scripts
+./build.sh build && ./bin/test.sh run  # Build and test
 ```
 
-### Project Structure
+### Updated Project Structure (v2.1.2)
 ```
 fx-gitsim/
-├── gitsim.sh           # Built script (generated)
+├── gitsim.sh           # Built script (generated, dynamic version)
 ├── build.sh            # BashFX build system
-├── test_runner.sh      # Test framework
-├── parts/              # Modular source code
+├── bin/                # NEW: Build and test utilities
+│   ├── test.sh         # TESTSH-compliant test runner
+│   └── build.sh        # Modular build scripts
+├── parts/              # Modular source code (18 parts)
 │   ├── build.map       # Build order specification
 │   ├── part_01_header.sh
 │   ├── part_02_config.sh
+│   ├── part_13_template_system.sh
+│   ├── part_18_templates_testsh.sh  # NEW: TESTSH template
 │   ├── ...
 │   └── part_99_main.sh
+├── tests/              # Test infrastructure
+│   ├── unit/           # Unit tests
+│   ├── sanity/         # Sanity checks
+│   ├── smoke/          # Smoke tests
+│   └── _adhoc/         # Adhoc tests
 └── docs/               # Documentation
     ├── gitsim_prd.md   # Product requirements
     ├── ref_template_system.md
     └── ...
 ```
 
+### Architecture Improvements (v2.1.2)
+- **Dynamic Version System**: Version extracted from semv metadata automatically
+- **TESTSH Integration**: Professional testing framework with 8 test categories
+- **Enhanced Template System**: Multi-language support with bootstrap capabilities
+- **Improved Installation**: Handles upgrades and XDG directory management
+- **Better CLI**: Comprehensive help system and improved command handling
+
 ### Function Ordinality (BashFX Pattern)
 - **High-Ordinal**: `do_*` functions (dispatchable commands)
 - **Mid-Ordinal**: `_*` functions (orchestration logic)
 - **Low-Ordinal**: `__*` functions (literal operations)
 
-### Contributing
+### Contributing (Updated Workflow)
 1. Edit files in `parts/`, not `gitsim.sh` directly
 2. Follow BashFX function ordinality patterns
-3. Add tests for new functionality
-4. Update documentation
-5. Run `./build.sh build && ./test_runner.sh` before commits
+3. Add tests using TESTSH categories (unit, sanity, smoke, etc.)
+4. Update documentation in README.md
+5. Test workflow: `./build.sh build && ./bin/test.sh run`
+6. Use `semv` for version management (no manual version updates)
 
 ## 🔒 Safety & Isolation
 
