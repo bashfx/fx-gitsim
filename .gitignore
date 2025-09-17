@@ -34,3 +34,4 @@ Thumbs.db
 # Build system temporary files
 parts-upd/
 parts-bak/
+.gitsim/

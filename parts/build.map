@@ -14,6 +14,7 @@
 15 : part_15_templates_bash.sh
 16 : part_16_templates_node.sh
 17 : part_17_templates_python.sh
+18 : part_18_templates_testsh.sh
 69 : part_69_dispatcher.sh
 70 : part_70_dispatchable_core.sh
 71 : part_71_dispatchable_home.sh

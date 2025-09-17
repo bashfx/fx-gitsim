@@ -1,0 +1,55 @@
+  #!/usr/bin/env bash
+  # scripts/bootstrap-tests.sh  (run from project root)
+
+  set -euo pipefail
+
+  cat_wrapper() {
+    local name="$1" ; shift
+    cat > "tests/${name}.rs" <<EOF
+  // Wrapper: ${name}.rs
+  fn main() {
+      println!("placeholder for ${name}");
+  }
+  EOF
+  }
+
+  mkdir -p tests/{unit,sanity,smoke,integration,e2e,uat,chaos,bench,_adhoc}
+
+  # top-level wrappers
+  cat_wrapper sanity
+  cat_wrapper smoke
+  cat_wrapper unit
+  cat_wrapper integration
+  cat_wrapper e2e
+  cat_wrapper uat
+  cat_wrapper chaos
+  cat_wrapper bench
+
+  # category module examples
+  cat > tests/sanity/example.rs <<'EOF'
+  // sanity/example.rs
+  #[test]
+  fn sanity_example() {
+      assert!(true);
+  }
+  EOF
+
+  cat > tests/uat/example.rs <<'EOF'
+  // uat/example.rs
+  #[test]
+  fn uat_example() {
+      assert!(true);
+  }
+  EOF
+
+  # adhoc skeleton
+  cat > tests/_adhoc/demo.sh <<'EOF'
+  #!/usr/bin/env bash
+  echo "adhoc demo"
+  EOF
+  chmod +x tests/_adhoc/demo.sh
+
+  After running it you should be able to call:
+
+  gitsim template bash sim-fx
+  (cd sim-fx && scripts/bootstrap-tests.sh && ../test.sh list)

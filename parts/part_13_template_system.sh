@@ -56,14 +56,15 @@ _validate_template() {
 # Template dispatcher - dynamically calls language-specific functions
 _dispatch_template() {
     local template="$1"
-    local target_dir="$2" 
+    local target_dir="$2"
     local project_name="$3"
-    
+    local testsh_flag="${4:-false}"
+
     # Dynamic function call: _create_rust_template, _create_node_template, etc.
     local create_func="_create_${template}_template"
-    
+
     if declare -f "$create_func" >/dev/null 2>&1; then
-        "$create_func" "$target_dir" "$project_name"
+        "$create_func" "$target_dir" "$project_name" "$testsh_flag"
     else
         error "Template implementation not found: $template"
         info "Function $create_func is not defined"
@@ -76,16 +77,17 @@ _apply_template() {
     local template="$1"
     local target_dir="$2"
     local project_name="$3"
+    local testsh_flag="${4:-false}"
     local validated_template
-    
+
     # Validate and resolve template name
     validated_template=$(_validate_template "$template") || return 1
-    
+
     # Ensure target directory exists
     mkdir -p "$target_dir"
-    
+
     # Dispatch to language-specific implementation
-    _dispatch_template "$validated_template" "$target_dir" "$project_name"
+    _dispatch_template "$validated_template" "$target_dir" "$project_name" "$testsh_flag"
 }
 
 # Enhanced init functions with template support
@@ -118,24 +120,57 @@ _init_with_template() {
 ################################################################################
 
 do_template() {
-    local template="$1"
-    local project_name="${2:-$(basename "$PWD")}"
+    local template=""
+    local project_name=""
     local target_dir="$PWD"
-    
+    local testsh_flag=false
+
+    # Parse arguments and flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --testsh)
+                testsh_flag=true
+                shift
+                ;;
+            --template=*)
+                template="${1#--template=}"
+                shift
+                ;;
+            *)
+                if [[ -z "$template" ]]; then
+                    template="$1"
+                elif [[ -z "$project_name" ]]; then
+                    project_name="$1"
+                else
+                    error "Unexpected argument: $1"
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Set defaults
+    [[ -z "$project_name" ]] && project_name="$(basename "$PWD")"
+
     if [[ -z "$template" ]]; then
         error "Template name required"
-        info "Usage: gitsim template <template-name> [project-name]"
+        info "Usage: gitsim template <template-name> [project-name] [--testsh]"
         do_template_list
         return 1
     fi
-    
+
     # If project name provided, create subdirectory
-    if [[ "$#" -gt 1 ]]; then
+    if [[ "$project_name" != "$(basename "$PWD")" ]]; then
         target_dir="$PWD/$project_name"
     fi
-    
+
     info "Creating $template template in $target_dir"
-    _apply_template "$template" "$target_dir" "$project_name"
+    if [[ "$testsh_flag" == true ]]; then
+        info "Including TESTSH comprehensive test suite"
+    fi
+
+    _apply_template "$template" "$target_dir" "$project_name" "$testsh_flag"
 }
 
 do_template_list() {

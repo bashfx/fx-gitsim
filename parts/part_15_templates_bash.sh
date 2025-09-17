@@ -13,26 +13,53 @@ _register_template "bash" "BashFX-compliant script project" "sh bashfx"
 _create_bash_template() {
     local target_dir="$1"
     local project_name="$2"
-    
+    local testsh_flag="${3:-false}"
+
     # Create BashFX project structure
-    mkdir -p "$target_dir"/{parts,tests}
-    
+    if [[ "$testsh_flag" == true ]]; then
+        # Enhanced structure with TESTSH
+        mkdir -p "$target_dir"/{parts,tests/{unit,sanity,smoke,integration,e2e,uat,chaos,bench,_adhoc},scripts}
+    else
+        # Standard structure
+        mkdir -p "$target_dir"/{parts,tests}
+    fi
+
     # Generate BashFX project files
     __print_bashfx_script "$target_dir/${project_name}.sh" "$project_name"
     __print_bashfx_buildmap "$target_dir/parts/build.map"
     __print_bashfx_header "$target_dir/parts/01_header.sh" "$project_name"
     __print_bashfx_main "$target_dir/parts/02_main.sh" "$project_name"
     __print_bashfx_build_script "$target_dir/build.sh" "$project_name"
-    __print_bash_test_runner "$target_dir/test_runner.sh" "$project_name"
-    __print_bash_gitignore "$target_dir/.gitignore"
+
+    # Choose test runner based on testsh flag
+    if [[ "$testsh_flag" == true ]]; then
+        __print_testsh_bash_runner "$target_dir/test.sh" "$project_name"
+        __print_testsh_bootstrap_bash "$target_dir/scripts/bootstrap-tests.sh" "$project_name"
+        __print_testsh_bash_examples "$target_dir" "$project_name"
+        __print_testsh_gitignore "$target_dir/.gitignore"
+    else
+        __print_bash_test_runner "$target_dir/test_runner.sh" "$project_name"
+        __print_bash_gitignore "$target_dir/.gitignore"
+    fi
+
     __print_readme_md "$target_dir/README.md" "$project_name" "BashFX"
-    
+
     # Make scripts executable
     chmod +x "$target_dir/${project_name}.sh"
     chmod +x "$target_dir/build.sh"
-    chmod +x "$target_dir/test_runner.sh"
-    
+
+    if [[ "$testsh_flag" == true ]]; then
+        chmod +x "$target_dir/test.sh"
+        chmod +x "$target_dir/scripts/bootstrap-tests.sh"
+        chmod +x "$target_dir/tests/_adhoc"/*.sh 2>/dev/null || true
+    else
+        chmod +x "$target_dir/test_runner.sh"
+    fi
+
     trace "Created BashFX project structure in $target_dir"
+    if [[ "$testsh_flag" == true ]]; then
+        trace "Included TESTSH comprehensive test suite"
+    fi
     return 0
 }
 
@@ -664,4 +691,506 @@ EOF
     
     # Add common patterns
     __print_common_gitignore "$file"
+}
+
+################################################################################
+# TESTSH Integration Functions for Bash Template
+################################################################################
+
+__print_testsh_bash_runner() {
+    local file="$1"
+    local name="$2"
+
+    cat > "$file" << EOF
+#!/usr/bin/env bash
+# test.sh - TESTSH-Compliant Test Runner for $name (BashFX integration)
+#
+# Supports hierarchical test execution with BashFX project structure
+
+set -e
+
+# Configuration
+readonly SCRIPT_NAME="test.sh"
+readonly SCRIPT_VERSION="1.0.0"
+readonly PROJECT_NAME="$name"
+readonly PROJECT_SCRIPT="./$name.sh"
+
+# Colors for output
+readonly RED=\$'\\033[31m'
+readonly GREEN=\$'\\033[32m'
+readonly YELLOW=\$'\\033[33m'
+readonly BLUE=\$'\\033[34m'
+readonly RESET=\$'\\033[0m'
+
+# Test categories in execution order
+readonly TEST_CATEGORIES=(
+    "sanity"
+    "smoke"
+    "unit"
+    "integration"
+    "e2e"
+    "uat"
+    "chaos"
+    "bench"
+)
+
+# Logging functions
+info() { printf "%s[INFO]%s %s\\n" "\$BLUE" "\$RESET" "\$*" >&2; }
+okay() { printf "%s[OK]%s %s\\n" "\$GREEN" "\$RESET" "\$*" >&2; }
+warn() { printf "%s[WARN]%s %s\\n" "\$YELLOW" "\$RESET" "\$*" >&2; }
+error() { printf "%s[ERROR]%s %s\\n" "\$RED" "\$RESET" "\$*" >&2; }
+
+# BashFX integration - ensure project is built
+ensure_project_built() {
+    if [[ -f "build.sh" ]] && [[ ! -f "\$PROJECT_SCRIPT" || "build.sh" -nt "\$PROJECT_SCRIPT" ]]; then
+        info "Building project before running tests..."
+        bash build.sh build
+    fi
+}
+
+# Test execution functions
+run_category_tests() {
+    local category="\$1"
+    local test_dir="tests/\$category"
+    local tests_found=0
+    local tests_passed=0
+
+    info "Running \$category tests..."
+
+    # Run bash test files in category directory
+    if [[ -d "\$test_dir" ]]; then
+        for test_file in "\$test_dir"/*.sh; do
+            [[ -f "\$test_file" ]] || continue
+            [[ -x "\$test_file" ]] || continue
+
+            info "Executing: \$(basename "\$test_file")"
+            if bash "\$test_file"; then
+                (( tests_passed++ ))
+            fi
+            (( tests_found++ ))
+        done
+    fi
+
+    # Check for category wrapper script
+    if [[ -f "tests/\$category.sh" ]]; then
+        info "Executing category wrapper: \$category.sh"
+        if bash "tests/\$category.sh"; then
+            (( tests_passed++ ))
+        fi
+        (( tests_found++ ))
+    fi
+
+    if [[ \$tests_found -eq 0 ]]; then
+        warn "No tests found for category: \$category"
+    else
+        okay "\$category: \$tests_passed/\$tests_found tests passed"
+    fi
+
+    return \$(( tests_found - tests_passed ))
+}
+
+run_adhoc_tests() {
+    local adhoc_dir="tests/_adhoc"
+    local tests_found=0
+    local tests_passed=0
+
+    info "Running adhoc tests..."
+
+    if [[ -d "\$adhoc_dir" ]]; then
+        for test_file in "\$adhoc_dir"/*; do
+            [[ -f "\$test_file" ]] || continue
+            [[ -x "\$test_file" ]] || continue
+
+            info "Executing adhoc: \$(basename "\$test_file")"
+            if "\$test_file"; then
+                (( tests_passed++ ))
+            fi
+            (( tests_found++ ))
+        done
+    fi
+
+    if [[ \$tests_found -eq 0 ]]; then
+        warn "No adhoc tests found"
+    else
+        okay "adhoc: \$tests_passed/\$tests_found tests passed"
+    fi
+
+    return \$(( tests_found - tests_passed ))
+}
+
+# Command implementations
+cmd_list() {
+    info "Available test categories for \$PROJECT_NAME:"
+    for category in "\${TEST_CATEGORIES[@]}"; do
+        local count=0
+        local wrapper_exists=false
+
+        # Check for category wrapper
+        [[ -f "tests/\$category.sh" ]] && wrapper_exists=true
+
+        # Count individual test files
+        if [[ -d "tests/\$category" ]]; then
+            count=\$(find "tests/\$category" -name "*.sh" -type f | wc -l)
+        fi
+
+        printf "  %-12s" "\$category"
+        [[ "\$wrapper_exists" == true ]] && printf "[wrapper] "
+        printf "(%d files)\\n" "\$count"
+    done
+
+    # Count adhoc tests
+    local adhoc_count=0
+    if [[ -d "tests/_adhoc" ]]; then
+        adhoc_count=\$(find "tests/_adhoc" -type f -executable | wc -l)
+    fi
+    printf "  %-12s(%d files)\\n" "_adhoc" "\$adhoc_count"
+}
+
+cmd_run() {
+    local category="\$1"
+
+    # Ensure project is built before testing
+    ensure_project_built
+
+    if [[ -z "\$category" ]]; then
+        # Run all categories
+        local total_failures=0
+
+        info "Running all test categories for \$PROJECT_NAME"
+
+        for cat in "\${TEST_CATEGORIES[@]}"; do
+            run_category_tests "\$cat" || (( total_failures++ ))
+        done
+
+        # Run adhoc tests
+        run_adhoc_tests || (( total_failures++ ))
+
+        if [[ \$total_failures -eq 0 ]]; then
+            okay "All test categories passed!"
+        else
+            error "\$total_failures test categories had failures"
+            return 1
+        fi
+    else
+        # Run specific category
+        if [[ " \${TEST_CATEGORIES[*]} " =~ " \$category " ]]; then
+            run_category_tests "\$category"
+        elif [[ "\$category" == "adhoc" ]]; then
+            run_adhoc_tests
+        else
+            error "Unknown test category: \$category"
+            info "Available categories: \${TEST_CATEGORIES[*]} adhoc"
+            return 1
+        fi
+    fi
+}
+
+cmd_bootstrap() {
+    if [[ -f "scripts/bootstrap-tests.sh" ]]; then
+        info "Running test structure bootstrap..."
+        bash scripts/bootstrap-tests.sh "bash"
+    else
+        error "Bootstrap script not found: scripts/bootstrap-tests.sh"
+        return 1
+    fi
+}
+
+cmd_build() {
+    if [[ -f "build.sh" ]]; then
+        info "Building project..."
+        bash build.sh build
+    else
+        error "Build script not found: build.sh"
+        return 1
+    fi
+}
+
+cmd_clean() {
+    info "Cleaning test and build artifacts..."
+
+    # Clean test artifacts
+    find tests/ -name "*.tmp" -delete 2>/dev/null || true
+
+    # Clean build artifacts if build.sh exists
+    if [[ -f "build.sh" ]]; then
+        bash build.sh clean 2>/dev/null || true
+    fi
+
+    okay "Artifacts cleaned"
+}
+
+# Usage information
+usage() {
+    cat << USAGE_EOF
+\$SCRIPT_NAME v\$SCRIPT_VERSION - TESTSH Test Runner for \$PROJECT_NAME
+
+USAGE:
+    \$SCRIPT_NAME <command> [args]
+
+COMMANDS:
+    list                   List all test categories and counts
+    run [category]         Run tests (all categories if none specified)
+    bootstrap              Initialize TESTSH test structure for bash
+    build                  Build the project using build.sh
+    clean                  Clean test and build artifacts
+
+TEST CATEGORIES:
+    sanity, smoke, unit, integration, e2e, uat, chaos, bench, adhoc
+
+EXAMPLES:
+    \$SCRIPT_NAME list
+    \$SCRIPT_NAME run
+    \$SCRIPT_NAME run sanity
+    \$SCRIPT_NAME bootstrap
+    \$SCRIPT_NAME build
+    \$SCRIPT_NAME clean
+
+BASHFX INTEGRATION:
+    - Automatically builds project before testing if needed
+    - Supports modular build system via build.sh
+    - Compatible with BashFX project structure
+
+USAGE_EOF
+}
+
+# Main execution
+main() {
+    case "\${1:-run}" in
+        list|ls)
+            cmd_list
+            ;;
+        run|test)
+            shift
+            cmd_run "\$@"
+            ;;
+        bootstrap|init)
+            cmd_bootstrap
+            ;;
+        build)
+            cmd_build
+            ;;
+        clean)
+            cmd_clean
+            ;;
+        help|--help|-h)
+            usage
+            ;;
+        *)
+            error "Unknown command: \$1"
+            usage
+            return 1
+            ;;
+    esac
+}
+
+main "\$@"
+EOF
+}
+
+__print_testsh_bootstrap_bash() {
+    local file="$1"
+    local name="$2"
+
+    cat > "$file" << EOF
+#!/usr/bin/env bash
+# scripts/bootstrap-tests.sh - TESTSH Structure Generator for $name
+# Generates bash-specific test structure for BashFX projects
+
+set -euo pipefail
+
+# Colors for output
+readonly GREEN=\$'\\033[32m'
+readonly BLUE=\$'\\033[34m'
+readonly RESET=\$'\\033[0m'
+
+info() { printf "%s[INFO]%s %s\\n" "\$BLUE" "\$RESET" "\$*"; }
+okay() { printf "%s[OK]%s %s\\n" "\$GREEN" "\$RESET" "\$*"; }
+
+cat_wrapper() {
+    local name="\$1"
+
+    cat > "tests/\${name}.sh" <<BASH_EOF
+#!/usr/bin/env bash
+# tests/\${name}.sh - \${name} test wrapper for $name
+
+# Source the main script for testing (after building)
+if [[ -f "./$name.sh" ]]; then
+    # Test by executing commands rather than sourcing
+    TEST_SCRIPT="./$name.sh"
+else
+    echo "Error: Project script not found. Run 'bash build.sh' first."
+    exit 1
+fi
+
+echo "Running \${name} tests for $name"
+
+# Add your \${name} test logic here
+# Example: \\\$TEST_SCRIPT version
+
+exit 0
+BASH_EOF
+    chmod +x "tests/\${name}.sh"
+}
+
+main() {
+    info "Bootstrapping TESTSH structure for bash project: $name"
+
+    # Ensure test directories exist
+    mkdir -p tests/{unit,sanity,smoke,integration,e2e,uat,chaos,bench,_adhoc}
+
+    # Create top-level test wrappers
+    info "Creating top-level test wrappers..."
+    cat_wrapper "sanity"
+    cat_wrapper "smoke"
+    cat_wrapper "unit"
+    cat_wrapper "integration"
+    cat_wrapper "e2e"
+    cat_wrapper "uat"
+    cat_wrapper "chaos"
+    cat_wrapper "bench"
+
+    # Create category examples
+    info "Creating category examples..."
+    cat > tests/sanity/basic.sh <<'BASH_EOF'
+#!/usr/bin/env bash
+# tests/sanity/basic.sh - Basic sanity checks
+
+# Project structure checks
+test_project_structure() {
+    [[ -f "build.sh" ]] || { echo "build.sh missing"; return 1; }
+    [[ -f "parts/build.map" ]] || { echo "parts/build.map missing"; return 1; }
+    [[ -d "parts" ]] || { echo "parts directory missing"; return 1; }
+    echo "Project structure is sane"
+    return 0
+}
+
+# Build system check
+test_build_system() {
+    if ! bash build.sh build; then
+        echo "Build system failed"
+        return 1
+    fi
+    echo "Build system is working"
+    return 0
+}
+
+# Run tests
+test_project_structure
+test_build_system
+BASH_EOF
+    chmod +x tests/sanity/basic.sh
+
+    cat > tests/smoke/quick.sh <<'BASH_EOF'
+#!/usr/bin/env bash
+# tests/smoke/quick.sh - Quick smoke tests
+
+PROJECT_SCRIPT="./$name.sh"
+
+test_script_executable() {
+    [[ -x "\$PROJECT_SCRIPT" ]] || { echo "Script not executable"; return 1; }
+    echo "Script is executable"
+    return 0
+}
+
+test_help_command() {
+    if ! "\$PROJECT_SCRIPT" --help >/dev/null 2>&1; then
+        echo "Help command failed"
+        return 1
+    fi
+    echo "Help command works"
+    return 0
+}
+
+test_version_command() {
+    if ! "\$PROJECT_SCRIPT" version >/dev/null 2>&1; then
+        echo "Version command failed"
+        return 1
+    fi
+    echo "Version command works"
+    return 0
+}
+
+# Run tests
+test_script_executable
+test_help_command
+test_version_command
+BASH_EOF
+    chmod +x tests/smoke/quick.sh
+
+    # Create adhoc skeleton
+    info "Creating adhoc test skeleton..."
+    cat > tests/_adhoc/demo.sh <<'ADHOC_EOF'
+#!/usr/bin/env bash
+# tests/_adhoc/demo.sh - Example adhoc test for $name
+
+echo "This is an adhoc test for $name"
+echo "Testing specific functionality or edge cases"
+
+# Example test
+if [[ -f "./$name.sh" ]]; then
+    echo "Project script found"
+else
+    echo "Project script missing - run build.sh first"
+    exit 1
+fi
+
+exit 0
+ADHOC_EOF
+    chmod +x tests/_adhoc/demo.sh
+
+    okay "TESTSH structure bootstrapped for bash project"
+    info "Run '../test.sh list' to see available test categories"
+    info "Run '../test.sh bootstrap' to regenerate this structure"
+}
+
+main "\$@"
+EOF
+}
+
+__print_testsh_bash_examples() {
+    local target_dir="$1"
+    local name="$2"
+
+    # Create comprehensive examples for bash testing
+    cat > "$target_dir/tests/unit/functions.sh" << EOF
+#!/usr/bin/env bash
+# tests/unit/functions.sh - Unit tests for individual functions
+
+# This would test individual functions from your script
+# Note: BashFX scripts are typically tested via CLI rather than sourcing
+
+echo "Unit testing individual functions (if applicable)"
+
+# Example: If you expose functions for testing
+# test_validate_input() {
+#     # Test input validation logic
+#     return 0
+# }
+
+exit 0
+EOF
+    chmod +x "$target_dir/tests/unit/functions.sh"
+
+    cat > "$target_dir/tests/integration/workflow.sh" << EOF
+#!/usr/bin/env bash
+# tests/integration/workflow.sh - Integration workflow tests
+
+PROJECT_SCRIPT="./$name.sh"
+
+test_complete_workflow() {
+    echo "Testing complete workflow integration"
+
+    # Example workflow test
+    if ! "\$PROJECT_SCRIPT" demo >/dev/null 2>&1; then
+        echo "Demo workflow failed"
+        return 1
+    fi
+
+    echo "Integration workflow passed"
+    return 0
+}
+
+test_complete_workflow
+EOF
+    chmod +x "$target_dir/tests/integration/workflow.sh"
 }

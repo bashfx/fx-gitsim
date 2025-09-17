@@ -51,7 +51,7 @@ else
             -d|--debug|-t|--trace|-q|--quiet|-f|-y|--yes|-D|--dev|-h|--help)
                 ;;
             # Command-specific flags that should be preserved
-            -m|--allow-empty|--template=*|--porcelain|--force)
+            -m|--allow-empty|--template=*|--porcelain|--force|--testsh)
                 args+=("$arg")
                 # If -m, also preserve the next argument (the message)
                 if [[ "$arg" == "-m" ]]; then
