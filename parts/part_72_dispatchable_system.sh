@@ -9,15 +9,28 @@ do_version() {
 
 do_install() {
     local ret=1
-    
+
     info "Installing $GITSIM_NAME to XDG+ directories..."
-    
+
+    # Remove previous installation if it exists
+    if [[ -f "$GITSIM_LIB_DIR/gitsim.sh" ]]; then
+        info "Removing previous installation..."
+        rm -f "$GITSIM_LIB_DIR/gitsim.sh"
+        trace "Removed previous lib file"
+    fi
+
+    if [[ -L "$GITSIM_BIN_LINK" ]] || [[ -f "$GITSIM_BIN_LINK" ]]; then
+        info "Removing previous symlink..."
+        rm -f "$GITSIM_BIN_LINK"
+        trace "Removed previous bin symlink"
+    fi
+
     # Create directories
     mkdir -p "$GITSIM_LIB_DIR" "$XDG_BIN_HOME/fx" || {
         error "Failed to create installation directories"
         return 1
     }
-    
+
     # Copy script to lib directory
     if cp "$0" "$GITSIM_LIB_DIR/gitsim.sh"; then
         trace "Copied script to $GITSIM_LIB_DIR"
@@ -25,21 +38,21 @@ do_install() {
         error "Failed to copy script to lib directory"
         return 1
     fi
-    
+
     # Create symlink in bin directory (flattened, no .sh extension)
-    if ln -sf "$GITSIM_LIB_DIR/gitsim.sh" "$GITSIM_BIN_LINK"; then
+    if ln -s "$GITSIM_LIB_DIR/gitsim.sh" "$GITSIM_BIN_LINK"; then
         trace "Created symlink at $GITSIM_BIN_LINK"
     else
         error "Failed to create symlink"
         return 1
     fi
-    
+
     # Make sure it's executable
     chmod +x "$GITSIM_LIB_DIR/gitsim.sh"
-    
+
     okay "Installed $GITSIM_NAME successfully"
     info "Add $XDG_BIN_HOME/fx to your PATH to use: export PATH=\"$XDG_BIN_HOME/fx:\$PATH\""
-    
+
     return 0
 }
 
