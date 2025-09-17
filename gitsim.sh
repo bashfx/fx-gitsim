@@ -5142,7 +5142,7 @@ _create_testsh_template() {
 
     # Generate TESTSH project files
     __print_testsh_bootstrap_script "$target_dir/scripts/bootstrap-tests.sh" "$project_name"
-    __print_testsh_main_runner "$target_dir/test.sh" "$project_name"
+    __print_testsh_main_runner "$target_dir/testsim.sh" "$project_name"
     __print_testsh_wrappers "$target_dir" "$project_name"
     __print_testsh_examples "$target_dir" "$project_name"
     __print_testsh_gitignore "$target_dir/.gitignore"
@@ -5150,7 +5150,7 @@ _create_testsh_template() {
 
     # Make scripts executable
     chmod +x "$target_dir/scripts/bootstrap-tests.sh"
-    chmod +x "$target_dir/test.sh"
+    chmod +x "$target_dir/testsim.sh"
     chmod +x "$target_dir/tests/_adhoc"/*.sh 2>/dev/null || true
 
     trace "Created TESTSH project structure in $target_dir"
@@ -5161,7 +5161,7 @@ _create_testsh_template() {
 _show_testsh_template() {
     cat << 'EOF'
 TESTSH project structure:
-  test.sh                 - Main test runner with category support
+  testsim.sh                 - Main test runner with category support
   scripts/
     bootstrap-tests.sh    - Test structure generator
   tests/
@@ -5380,7 +5380,7 @@ ADHOC_EOF
     chmod +x tests/_adhoc/demo.sh
 
     okay "TESTSH structure bootstrapped successfully"
-    info "Run '../test.sh list' to see available test categories"
+    info "Run '../testsim.sh list' to see available test categories"
 }
 
 main "\$@"
@@ -5393,7 +5393,7 @@ __print_testsh_main_runner() {
 
     cat > "$file" << EOF
 #!/usr/bin/env bash
-# test.sh - TESTSH-Compliant Test Runner for $name
+# testsim.sh - TESTSH-Compliant Test Runner for $name
 #
 # Supports hierarchical test execution across multiple categories
 # Compatible with GitSim TESTSH architecture
@@ -5401,7 +5401,7 @@ __print_testsh_main_runner() {
 set -e
 
 # Configuration
-readonly SCRIPT_NAME="test.sh"
+readonly SCRIPT_NAME="testsim.sh"
 readonly SCRIPT_VERSION="1.0.0"
 readonly PROJECT_NAME="$name"
 
@@ -5782,6 +5782,7 @@ EOF
     # Add common patterns
     __print_common_gitignore "$file"
 }
+
 
 ################################################################################
 # Part 69: part_69_dispatcher.sh
