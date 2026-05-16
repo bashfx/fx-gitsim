@@ -82,7 +82,7 @@ build_script() {
     local parts_used=0
     local parts_missing=0
     
-    info "Building $OUTPUT_FILE from parts... (expecting 18 parts)"
+    info "Building $OUTPUT_FILE from parts..."
     
     # Create temporary file
     > "$temp_file"
@@ -102,17 +102,31 @@ build_script() {
             if [[ -f "$part_path" ]]; then
                 info "Adding part $part_num: $part_file"
                 
-                # Add part header comment
-                cat >> "$temp_file" << EOF
+                # Keep shebang as byte zero for executable packaged scripts.
+                # The first part owns the shebang; build annotations must come after it.
+                if [[ $parts_used -eq 0 ]] && IFS= read -r first_line < "$part_path" && [[ "$first_line" == '#!'* ]]; then
+                    printf '%s\n' "$first_line" >> "$temp_file"
+                    cat >> "$temp_file" << EOF
 
 ################################################################################
 # Part $part_num: $part_file
 ################################################################################
 
 EOF
-                
-                # Add the actual part content
-                cat "$part_path" >> "$temp_file"
+                    tail -n +2 "$part_path" >> "$temp_file"
+                else
+                    # Add part header comment
+                    cat >> "$temp_file" << EOF
+
+################################################################################
+# Part $part_num: $part_file
+################################################################################
+
+EOF
+                    
+                    # Add the actual part content
+                    cat "$part_path" >> "$temp_file"
+                fi
                 echo >> "$temp_file"  # Add newline between parts
                 ((parts_used++))
             else
