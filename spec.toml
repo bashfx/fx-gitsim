@@ -1,0 +1,34 @@
+[repo]
+uid = "repo_42a0538f7bc427a0aaae"
+id = "bashfx/fx-gitsim"
+name = "fx-gitsim"
+kind = "tool"
+lifecycle = "active"
+
+[[capabilities]]
+name = "repo.create"
+module = "parts/part_70_dispatchable_core.sh"
+class = "tool"
+tags = ["git-simulation", "init", "commit", "index", "safe-sandbox"]
+stability = "working"
+
+[[capabilities]]
+name = "repo.inspect"
+module = "parts/part_70_dispatchable_core.sh"
+class = "tool"
+tags = ["status", "porcelain", "branch", "simulated-git"]
+stability = "working"
+
+[[capabilities]]
+name = "file.generate"
+module = "parts/part_13_template_system.sh"
+class = "tool"
+tags = ["templates", "rust", "bash", "node", "python", "testsh"]
+stability = "working"
+
+[[capabilities]]
+name = "process.manage"
+module = "parts/part_72_dispatchable_system.sh"
+class = "adapter"
+tags = ["install", "uninstall", "cleanup", "xdg", "bashfx"]
+stability = "experimental"
